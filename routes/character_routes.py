@@ -24,15 +24,15 @@ class CharacterResponse(BaseModel):
     id: int
     name: str
     greeting: str  # Character's initial greeting message
-    tagline: str
-    photo_url: str
-    num_chats_created: int
-    num_messages: int
-    rating: float
-    attributes: List[str]
+    tagline: Optional[str] = ""  # Make optional with default
+    photo_url: Optional[str] = ""  # Make optional with default
+    num_chats_created: int = 0  # Add default
+    num_messages: int = 0  # Add default
+    rating: float = 0.0  # Add default
+    attributes: List[str] = []  # Add default
     
     class Config:
-        from_attributes = True
+        orm_mode = True  # Use orm_mode in v1 instead of from_attributes
 
 @router.post("/", response_model=CharacterResponse)
 async def create_character(
