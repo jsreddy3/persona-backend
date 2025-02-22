@@ -15,7 +15,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",  # Local frontend
         "http://localhost:8000",  # Local backend static files
-        "https://backend-persona.herokuapp.com"  # Heroku domain
+        "https://backend-persona-da6c29e3bf72.herokuapp.com"  # Heroku domain
     ],
     allow_credentials=True,
     allow_methods=["*"],
