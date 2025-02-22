@@ -5,13 +5,14 @@ import os
 from routes import character_routes
 from routes import user_routes
 from routes import conversation_routes
+from database.init_db import init_db
 
 app = FastAPI(title="PersonaAI API")
 
-# Configure CORS for localhost frontend
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000"],
+    allow_origins=["http://localhost:3000"],  # Frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -23,6 +24,9 @@ os.makedirs(static_dir, exist_ok=True)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+# Initialize database
+init_db()
 
 # Include routers
 app.include_router(character_routes.router)
