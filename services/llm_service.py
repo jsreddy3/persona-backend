@@ -9,7 +9,7 @@ from database.models import Message
 logger = logging.getLogger(__name__)
 
 class LLMConfig(BaseModel):
-    model: str = "gpt-3.5-turbo"
+    model: str = "gpt-4o-mini"
     temperature: float = 0.7
     max_tokens: int = 150
 
