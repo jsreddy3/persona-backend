@@ -10,6 +10,7 @@ import os
 
 class ConversationService:
     def __init__(self, db: Session):
+        self.db = db  # Store db reference for transactions
         self.repository = ConversationRepository(db)
         self.user_repository = UserRepository(db)
         self.character_repository = CharacterRepository(db)
@@ -62,7 +63,7 @@ class ConversationService:
         
         return conversation
     
-    def process_user_message(self, user_id: int, conversation_id: int, message_content: str) -> Tuple[Message, Message]:
+    async def process_user_message(self, user_id: int, conversation_id: int, message_content: str) -> Tuple[Message, Message]:
         """
         Process a user message and generate AI response
         Returns tuple of (user_message, ai_message)
@@ -77,37 +78,40 @@ class ConversationService:
             
         if conversation.creator_id != user_id and user_id not in [p.id for p in conversation.participants]:
             raise ValueError("User does not have access to this conversation")
-            
-        # Add user message to conversation
-        user_message = self.repository.add_message(
-            conversation_id=conversation_id,
-            role="user",
-            content=message_content
-        )
         
         try:
-            # Get conversation history excluding the new message
+            # Get conversation history before adding new message
             history = self.get_conversation_messages(conversation_id)
             
-            # Get AI response using LLM service
-            ai_response = self.llm_service.process_message(
+            # Get AI response using LLM service first
+            ai_response = await self.llm_service.process_message(
                 conversation.system_message,
                 history,
                 message_content
             )
             
-            # Add AI response to conversation
+            # Only after successful LLM response, add both messages in a transaction
+            user_message = self.repository.add_message(
+                conversation_id=conversation_id,
+                role="user",
+                content=message_content
+            )
+            
             ai_message = self.repository.add_message(
                 conversation_id=conversation_id,
                 role="assistant",
                 content=ai_response
             )
             
+            # Commit the transaction
+            self.db.commit()
+            
             return user_message, ai_message
             
         except Exception as e:
-            # If AI processing fails, still keep the user message but raise error
-            raise RuntimeError(f"Failed to process message: {str(e)}")
+            # Rollback on error
+            self.db.rollback()
+            raise ValueError(f"Failed to process message: {str(e)}")
     
     def get_conversation_messages(self, conversation_id: int) -> List[Message]:
         """Get all messages in a conversation except the initial user greeting"""

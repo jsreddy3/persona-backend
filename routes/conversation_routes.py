@@ -42,7 +42,7 @@ async def send_message(
     """
     try:
         service = ConversationService(db)
-        user_msg, ai_msg = service.process_user_message(
+        user_msg, ai_msg = await service.process_user_message(
             user_id=current_user.id,
             conversation_id=conversation_id,
             message_content=message.content
@@ -50,7 +50,7 @@ async def send_message(
         return [user_msg, ai_msg]
     except ValueError as e:
         logger.error(f"Error sending message: {str(e)}")
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
     except RuntimeError as e:
         logger.error(f"Error sending message: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

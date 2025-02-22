@@ -1,18 +1,15 @@
 from typing import List, Dict, Optional
 from pydantic import BaseModel
-from litellm import completion
-import litellm
+from litellm import completion, acompletion
 import os
 import logging
 from dotenv import load_dotenv
 from database.models import Message
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class LLMConfig(BaseModel):
-    model: str = "gpt-3.5-turbo"  # Use standard OpenAI model
+    model: str = "gpt-3.5-turbo"
     temperature: float = 0.7
     max_tokens: int = 150
 
@@ -31,12 +28,8 @@ class LLMService:
         if not os.getenv("OPENAI_API_KEY"):
             logger.error("OPENAI_API_KEY not found in environment variables")
             raise ValueError("OPENAI_API_KEY not set")
-        
-        # Configure litellm
-        litellm.drop_params = True  # Don't pass unexpected params
-        litellm.set_verbose = False
 
-    def process_message(
+    async def process_message(
         self,
         system_message: str,
         conversation_history: List[Message],
@@ -78,7 +71,7 @@ class LLMService:
             logger.info(f"Sending request to LLM with {len(messages)} messages")
             
             # Call LLM with minimal parameters
-            response = completion(
+            response = await acompletion(
                 model=self.config.model,
                 messages=messages,
                 temperature=self.config.temperature,
