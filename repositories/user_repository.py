@@ -1,18 +1,67 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import update
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import update, and_
 from typing import Optional
+from datetime import datetime
 from .base import BaseRepository
-from database.models import User
+from database.models import User, WorldIDVerification
 
 class UserRepository(BaseRepository[User]):
     def __init__(self, db: Session):
         super().__init__(User, db)
     
+    def get_by_world_id(self, world_id: str) -> Optional[User]:
+        """Get user by their World ID nullifier hash"""
+        return self.db.query(User).filter(User.world_id == world_id).first()
+    
+    def get_latest_verification(self, world_id: str) -> Optional[WorldIDVerification]:
+        """Get the user's latest World ID verification"""
+        return self.db.query(WorldIDVerification)\
+            .join(User)\
+            .filter(User.world_id == world_id)\
+            .order_by(WorldIDVerification.created_at.desc())\
+            .first()
+
+    def create_or_update_user(self, world_id: str, language: str = "en") -> User:
+        """Create a new user or update existing one with World ID"""
+        user = self.get_by_world_id(world_id)
+        
+        if not user:
+            user = User(
+                world_id=world_id,
+                language=language.lower(),
+                created_at=datetime.utcnow(),
+                last_active=datetime.utcnow()
+            )
+            self.db.add(user)
+        else:
+            user.last_active = datetime.utcnow()
+            if language:
+                user.language = language.lower()
+        
+        self.db.commit()
+        self.db.refresh(user)
+        return user
+
+    def create_verification(self, world_id: str, merkle_root: str) -> WorldIDVerification:
+        """Create a new World ID verification record"""
+        user = self.get_by_world_id(world_id)
+        if not user:
+            raise ValueError(f"User with World ID {world_id} not found")
+            
+        verification = WorldIDVerification(
+            user_id=user.id,
+            nullifier_hash=world_id,
+            merkle_root=merkle_root,
+            created_at=datetime.utcnow()
+        )
+        
+        self.db.add(verification)
+        self.db.commit()
+        self.db.refresh(verification)
+        return verification
+
     def update_credits(self, user_id: int, amount: int) -> Optional[User]:
-        """
-        Update user credits by adding amount (can be negative)
-        Returns None if user not found or if operation would result in negative credits
-        """
+        """Update user credits by adding amount (can be negative)"""
         user = self.get_by_id(user_id)
         if not user or user.credits + amount < 0:
             return None
@@ -23,6 +72,7 @@ class UserRepository(BaseRepository[User]):
         return user
     
     def get_by_email(self, email: str) -> Optional[User]:
+        """Get user by email"""
         return self.db.query(User).filter(User.email == email).first()
     
     def get_with_characters(self, user_id: int) -> Optional[User]:

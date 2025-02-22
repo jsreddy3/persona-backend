@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-import logging
 from pydantic import BaseModel
 from database.database import get_db
+from database.models import User
 from services.conversation_service import ConversationService
+from dependencies.auth import get_current_user
+import logging
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -32,8 +34,7 @@ async def send_message(
     conversation_id: int,
     message: MessageCreate,
     db: Session = Depends(get_db),
-    # In real app, get user_id from auth token
-    user_id: int = 1
+    current_user: User = Depends(get_current_user)
 ):
     """
     Send a message in a conversation and get the AI's response
@@ -42,7 +43,7 @@ async def send_message(
     try:
         service = ConversationService(db)
         user_msg, ai_msg = service.process_user_message(
-            user_id=user_id,
+            user_id=current_user.id,
             conversation_id=conversation_id,
             message_content=message.content
         )
@@ -61,7 +62,7 @@ async def send_message(
 async def get_conversation_messages(
     conversation_id: int,
     db: Session = Depends(get_db),
-    user_id: int = 1
+    current_user: User = Depends(get_current_user)
 ):
     try:
         service = ConversationService(db)
@@ -74,14 +75,14 @@ async def get_conversation_messages(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/")
-def get_conversations(
+async def get_conversations(
     db: Session = Depends(get_db),
-    user_id: int = 1  # TODO: Get from auth
+    current_user: User = Depends(get_current_user)
 ):
     """Get all conversations for the current user"""
     try:
         service = ConversationService(db)
-        conversations = service.repository.get_by_user_id(user_id)
+        conversations = service.repository.get_by_user_id(current_user.id)
         return [
             {
                 "id": conv.id,
@@ -98,13 +99,13 @@ def get_conversations(
 async def create_conversation(
     conversation: ConversationCreate,
     db: Session = Depends(get_db),
-    user_id: int = 1
+    current_user: User = Depends(get_current_user)
 ):
     try:
         service = ConversationService(db)
         conv = service.create_conversation(
             character_id=conversation.character_id,
-            user_id=user_id,
+            user_id=current_user.id,
             language=conversation.language
         )
         return conv.id

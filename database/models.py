@@ -63,13 +63,29 @@ class User(Base):
     __tablename__ = "users"
     
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True)
-    email = Column(String, unique=True, index=True)
+    world_id = Column(String, unique=True, index=True)  # World ID nullifier hash
+    username = Column(String, unique=True, index=True, nullable=True)  # Optional
+    email = Column(String, unique=True, index=True, nullable=True)    # Optional
+    language = Column(String, default="en")  # Default language
     credits = Column(Integer, default=100)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_active = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
     created_characters = relationship("Character", back_populates="creator")
     created_conversations = relationship("Conversation", back_populates="creator")
     participated_conversations = relationship("Conversation", secondary=user_conversations, back_populates="participants")
+    verifications = relationship("WorldIDVerification", back_populates="user")
+
+class WorldIDVerification(Base):
+    __tablename__ = "world_id_verifications"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    nullifier_hash = Column(String, nullable=False, index=True)
+    merkle_root = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationship
+    user = relationship("User", back_populates="verifications")

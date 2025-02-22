@@ -91,195 +91,278 @@
             background: #f8f9fa;
             border-radius: 4px;
         }
+        .character-select-container {
+            margin-bottom: 20px;
+        }
+        .character-select-container select {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+        }
     </style>
 </head>
 <body>
     <!-- Sidebar -->
     <div class="sidebar">
         <h2>Characters</h2>
-        <select id="characterSelect" onchange="loadCharacter()">
-            <option value="">Select a character...</option>
-        </select>
-        <div id="selectedCharInfo"></div>
-
-        <h2>Conversations</h2>
-        <div id="conversationList" class="conversation-list">
+        <div class="character-select-container">
+            <select id="characterSelect" onchange="loadCharacter()">
+                <option value="">Select a character...</option>
+            </select>
+            <button onclick="startConversation()">Start New Conversation</button>
+        </div>
+        
+        <div class="character-form">
+            <h3>Create Character</h3>
+            <input type="text" id="characterName" placeholder="Character name">
+            <textarea id="systemPrompt" placeholder="System prompt"></textarea>
+            <textarea id="greeting" placeholder="Greeting message"></textarea>
+            <input type="text" id="tagline" placeholder="Tagline">
+            <input type="text" id="photoUrl" placeholder="Photo URL">
+            <button onclick="createCharacter()">Create Character</button>
+        </div>
+        
+        <div class="conversation-list" id="conversationList">
             <!-- Conversations will be loaded here -->
         </div>
     </div>
 
     <!-- Main Content -->
     <div class="main-content">
-        <h1>PersonaAI Chat</h1>
-        
-        <!-- Character Creation Form -->
-        <div class="character-form">
-            <h2>Create Character</h2>
-            <input type="text" id="charName" placeholder="Character Name" required><br>
-            <textarea id="charSystem" placeholder="System Prompt" required></textarea><br>
-            <textarea id="charGreeting" placeholder="Greeting Message" required></textarea><br>
-            <input type="text" id="charTagline" placeholder="Tagline" required><br>
-            <input type="text" id="charPhoto" placeholder="Photo URL" required><br>
-            <button onclick="createCharacter()">Create Character</button>
-        </div>
-
-        <!-- Chat Interface -->
-        <div class="chat-interface" id="chatInterface" style="display: none;">
-            <h2>Chat</h2>
+        <div id="characterInfo"></div>
+        <div class="chat-interface">
             <div class="chat-messages" id="messages"></div>
-            <input type="text" id="messageInput" placeholder="Type your message...">
-            <button onclick="sendMessage()">Send</button>
-            <div class="debug-info" id="debugInfo"></div>
+            <div class="message-input">
+                <input type="text" id="messageInput" placeholder="Type your message...">
+                <button id="send-button" onclick="sendMessage()">Send</button>
+            </div>
         </div>
+        <div class="debug-info" id="debugInfo"></div>
     </div>
 
     <script>
-        let currentConversationId = null;
-        let currentCharacterId = null;
-
-        // Load characters and conversations on page load
-        window.onload = async function() {
-            await loadCharacters();
-            await loadConversations();
+        // Test World ID credentials
+        const TEST_CREDENTIALS = {
+            nullifier_hash: "test_nullifier_123",
+            merkle_root: "test_merkle_root",
+            proof: "test_proof",
+            verification_level: "test"
+        };
+        
+        // Helper function to make authenticated requests
+        async function fetchWithAuth(url, options = {}) {
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-WorldID-Credentials': JSON.stringify(TEST_CREDENTIALS),
+                ...(options.headers || {})
+            };
+            
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error('Request failed:', error);
+                document.getElementById('debugInfo').textContent = `Error: ${error.message}`;
+                throw error;
+            }
         }
 
         async function loadCharacters() {
-            const response = await fetch('http://localhost:8000/characters/popular');
-            const characters = await response.json();
-            const select = document.getElementById('characterSelect');
-            select.innerHTML = '<option value="">Select a character...</option>';
-            characters.forEach(char => {
-                select.innerHTML += `<option value="${char.id}">${char.name}</option>`;
-            });
+            try {
+                const response = await fetchWithAuth('http://localhost:8000/characters/popular');
+                const select = document.getElementById('characterSelect');
+                select.innerHTML = '<option value="">Select a character...</option>';
+                
+                response.forEach(character => {
+                    const option = document.createElement('option');
+                    option.value = character.id;
+                    option.textContent = character.name;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Failed to load characters:', error);
+            }
         }
 
         async function loadConversations() {
-            const response = await fetch('http://localhost:8000/conversations/');
-            const conversations = await response.json();
-            const list = document.getElementById('conversationList');
-            list.innerHTML = '';
-            conversations.forEach(conv => {
-                const div = document.createElement('div');
-                div.className = `conversation-item ${conv.id === currentConversationId ? 'active' : ''}`;
-                div.onclick = () => loadConversation(conv.id);
-                div.innerHTML = `
-                    <strong>Character:</strong> ${conv.character_id}<br>
-                    <small>${new Date(conv.created_at).toLocaleString()}</small>
-                `;
-                list.appendChild(div);
-            });
+            try {
+                const conversations = await fetchWithAuth('http://localhost:8000/conversations/');
+                console.log('Loaded conversations:', conversations);
+                
+                const list = document.getElementById('conversationList');
+                list.innerHTML = '<h3>Your Conversations</h3>';
+                
+                conversations.forEach(conv => {
+                    const div = document.createElement('div');
+                    div.className = 'conversation-item';
+                    if (conv.id === currentConversationId) {
+                        div.classList.add('active');
+                    }
+                    div.textContent = `Conversation ${conv.id}`;
+                    div.onclick = () => loadConversation(conv.id);
+                    list.appendChild(div);
+                });
+            } catch (error) {
+                console.error('Failed to load conversations:', error);
+            }
         }
 
         async function createCharacter() {
             const character = {
-                name: document.getElementById('charName').value,
-                system_prompt: document.getElementById('charSystem').value,
-                greeting: document.getElementById('charGreeting').value,
-                tagline: document.getElementById('charTagline').value,
-                photo_url: document.getElementById('charPhoto').value,
+                name: document.getElementById('characterName').value,
+                system_prompt: document.getElementById('systemPrompt').value,
+                greeting: document.getElementById('greeting').value,
+                tagline: document.getElementById('tagline').value,
+                photo_url: document.getElementById('photoUrl').value,
                 attributes: []
             };
 
-            const response = await fetch('http://localhost:8000/characters/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(character)
-            });
-
-            if (response.ok) {
-                alert('Character created!');
+            try {
+                await fetchWithAuth('http://localhost:8000/characters/', {
+                    method: 'POST',
+                    body: JSON.stringify(character)
+                });
+                
                 loadCharacters();
-            } else {
-                alert('Error creating character');
+                
+                // Clear form
+                ['characterName', 'systemPrompt', 'greeting', 'tagline', 'photoUrl'].forEach(id => {
+                    document.getElementById(id).value = '';
+                });
+            } catch (error) {
+                console.error('Failed to create character:', error);
             }
         }
 
-        async function loadCharacter() {
-            currentCharacterId = document.getElementById('characterSelect').value;
-            if (!currentCharacterId) return;
+        let currentConversationId = null;
 
-            const response = await fetch(`http://localhost:8000/characters/${currentCharacterId}`);
-            const character = await response.json();
-            
-            document.getElementById('selectedCharInfo').innerHTML = `
-                <p><strong>${character.name}</strong></p>
-                <p>${character.tagline}</p>
-                <button onclick="startConversation()">Start New Chat</button>
-            `;
+        async function loadCharacter() {
+            const characterId = document.getElementById('characterSelect').value;
+            if (!characterId) return;
+
+            try {
+                const character = await fetchWithAuth(`http://localhost:8000/characters/${characterId}`);
+                document.getElementById('characterInfo').innerHTML = `
+                    <h2>${character.name}</h2>
+                    <p>${character.tagline || ''}</p>
+                `;
+            } catch (error) {
+                console.error('Failed to load character:', error);
+            }
         }
 
         async function loadConversation(conversationId) {
+            console.log('Loading conversation:', conversationId);
             currentConversationId = conversationId;
-            document.getElementById('chatInterface').style.display = 'block';
-            await loadMessages();
-            await loadConversations(); // Refresh list to show active state
+            
+            try {
+                const messages = await fetchWithAuth(`http://localhost:8000/conversations/${conversationId}/messages`);
+                console.log('Loaded messages:', messages);
+                
+                const messagesDiv = document.getElementById('messages');
+                messagesDiv.innerHTML = '';
+                
+                messages.forEach(msg => {
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = `message ${msg.role}-message`;
+                    messageDiv.textContent = msg.content;
+                    messagesDiv.appendChild(messageDiv);
+                });
+                
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                
+                // Update active conversation styling
+                document.querySelectorAll('.conversation-item').forEach(item => {
+                    item.classList.remove('active');
+                    if (item.textContent === `Conversation ${conversationId}`) {
+                        item.classList.add('active');
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to load conversation:', error);
+            }
         }
 
         async function startConversation() {
-            if (!currentCharacterId) return;
-
-            const response = await fetch('http://localhost:8000/conversations/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    character_id: parseInt(currentCharacterId),
-                    language: "EN"
-                })
-            });
-
-            if (response.ok) {
-                const conversationId = await response.json();
+            const characterId = document.getElementById('characterSelect').value;
+            if (!characterId) {
+                alert('Please select a character first');
+                return;
+            }
+            
+            try {
+                const response = await fetchWithAuth('http://localhost:8000/conversations/', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        character_id: parseInt(characterId),
+                        language: 'en'
+                    })
+                });
+                
+                // Get conversation ID from response
+                const conversationId = response;
+                console.log('Started conversation with ID:', conversationId);
+                
+                // Load the new conversation
                 await loadConversation(conversationId);
+                loadConversations();
+            } catch (error) {
+                console.error('Failed to start conversation:', error);
             }
         }
 
         async function loadMessages() {
             if (!currentConversationId) return;
 
-            const response = await fetch(`http://localhost:8000/conversations/${currentConversationId}/messages`);
-            const messages = await response.json();
-            
-            const messagesDiv = document.getElementById('messages');
-            messagesDiv.innerHTML = '';
-            messages.forEach(msg => {
-                const messageDiv = document.createElement('div');
-                messageDiv.className = `message ${msg.role}-message`;
-                messageDiv.textContent = msg.content;
-                messagesDiv.appendChild(messageDiv);
-            });
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-
-            // Update debug info
-            document.getElementById('debugInfo').innerHTML = `
-                Messages in conversation: ${messages.length}<br>
-                Current conversation ID: ${currentConversationId}
-            `;
+            try {
+                const messages = await fetchWithAuth(`http://localhost:8000/conversations/${currentConversationId}/messages`);
+                const messagesDiv = document.getElementById('messages');
+                messagesDiv.innerHTML = '';
+                
+                messages.forEach(msg => {
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = `message ${msg.role}-message`;
+                    messageDiv.textContent = msg.content;
+                    messagesDiv.appendChild(messageDiv);
+                });
+                
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            } catch (error) {
+                console.error('Failed to load messages:', error);
+            }
         }
 
         async function sendMessage() {
-            if (!currentConversationId) return;
-
             const messageInput = document.getElementById('messageInput');
             const content = messageInput.value.trim();
-            if (!content) return;
-
-            messageInput.value = '';
+            
+            console.log('Sending message:', { content, currentConversationId });
+            
+            if (!content || !currentConversationId) {
+                console.warn('Cannot send message: content or conversationId missing', { content, currentConversationId });
+                return;
+            }
 
             try {
-                const response = await fetch(`http://localhost:8000/conversations/${currentConversationId}/messages`, {
+                console.log('Making API request to send message...');
+                const messages = await fetchWithAuth(`http://localhost:8000/conversations/${currentConversationId}/messages`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ content })
                 });
-
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.detail);
-                }
-
-                await loadMessages();
+                console.log('Message sent successfully:', messages);
+                
+                messageInput.value = '';
+                loadMessages();
             } catch (error) {
-                alert(`Error sending message: ${error.message}`);
+                console.error('Failed to send message:', error);
             }
         }
 
@@ -289,6 +372,13 @@
                 sendMessage();
             }
         });
+
+        // Add click handler for send button
+        document.getElementById('send-button').addEventListener('click', sendMessage);
+
+        // Load initial data
+        loadCharacters();
+        loadConversations();
     </script>
 </body>
 </html>
