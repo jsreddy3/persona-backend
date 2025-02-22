@@ -12,7 +12,11 @@ app = FastAPI(title="PersonaAI API")
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend URL
+    allow_origins=[
+        "http://localhost:3000",  # Local frontend
+        "http://localhost:8000",  # Local backend static files
+        "https://backend-persona.herokuapp.com"  # Heroku domain
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
