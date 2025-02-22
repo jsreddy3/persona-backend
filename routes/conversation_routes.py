@@ -27,7 +27,7 @@ class MessageResponse(BaseModel):
     content: str
     
     class Config:
-        from_attributes = True
+        orm_mode = True  # Use orm_mode in v1 instead of from_attributes
 
 @router.post("/{conversation_id}/messages", response_model=List[MessageResponse])
 async def send_message(

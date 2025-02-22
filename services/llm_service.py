@@ -52,34 +52,34 @@ class LLMService:
                 {"role": "system", "content": system_message}
             ]
             
-            # Log conversation history
-            logger.info(f"Processing message with history length: {len(conversation_history)}")
-            for i, msg in enumerate(conversation_history):
-                logger.info(f"History message {i}: role={msg.role}, content={msg.content[:50]}...")
+            # Add conversation history
+            for msg in conversation_history:
                 messages.append({
                     "role": msg.role,
                     "content": msg.content
                 })
             
             # Add new message
-            logger.info(f"New message: {new_message[:50]}...")
             messages.append({
                 "role": "user",
                 "content": new_message
             })
             
+            # Log messages being sent
             logger.info(f"Total messages being sent to LLM: {len(messages)}")
             for i, msg in enumerate(messages):
                 logger.info(f"Message {i}: role={msg['role']}, content={msg['content'][:50]}...")
             
             logger.info(f"Sending request to LLM with {len(messages)} messages")
             
-            # Make LLM call
+            # Call LLM
             response = completion(
                 model=self.config.model,
                 messages=messages,
                 temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens
+                max_tokens=self.config.max_tokens,
+                api_key=os.getenv("OPENAI_API_KEY"),
+                stream=False
             )
             
             # Extract and return response
