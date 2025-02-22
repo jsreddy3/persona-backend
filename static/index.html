@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PersonaAI Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+        }
+        .sidebar {
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .main-content {
+            padding: 20px;
+        }
+        .character-form, .chat-interface {
+            margin-bottom: 20px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .user-message {
+            background-color: #e3f2fd;
+            margin-left: 20%;
+        }
+        .assistant-message {
+            background-color: #f5f5f5;
+            margin-right: 20%;
+        }
+        .chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px 0;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .conversation-list {
+            margin-top: 20px;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+        }
+        .conversation-item {
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .conversation-item:hover {
+            background-color: #f0f0f0;
+        }
+        .conversation-item.active {
+            background-color: #e3f2fd;
+        }
+        .debug-info {
+            font-family: monospace;
+            font-size: 12px;
+            color: #666;
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <h2>Characters</h2>
+        <select id="characterSelect" onchange="loadCharacter()">
+            <option value="">Select a character...</option>
+        </select>
+        <div id="selectedCharInfo"></div>
+
+        <h2>Conversations</h2>
+        <div id="conversationList" class="conversation-list">
+            <!-- Conversations will be loaded here -->
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <h1>PersonaAI Chat</h1>
+        
+        <!-- Character Creation Form -->
+        <div class="character-form">
+            <h2>Create Character</h2>
+            <input type="text" id="charName" placeholder="Character Name" required><br>
+            <textarea id="charSystem" placeholder="System Prompt" required></textarea><br>
+            <textarea id="charGreeting" placeholder="Greeting Message" required></textarea><br>
+            <input type="text" id="charTagline" placeholder="Tagline" required><br>
+            <input type="text" id="charPhoto" placeholder="Photo URL" required><br>
+            <button onclick="createCharacter()">Create Character</button>
+        </div>
+
+        <!-- Chat Interface -->
+        <div class="chat-interface" id="chatInterface" style="display: none;">
+            <h2>Chat</h2>
+            <div class="chat-messages" id="messages"></div>
+            <input type="text" id="messageInput" placeholder="Type your message...">
+            <button onclick="sendMessage()">Send</button>
+            <div class="debug-info" id="debugInfo"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentConversationId = null;
+        let currentCharacterId = null;
+
+        // Load characters and conversations on page load
+        window.onload = async function() {
+            await loadCharacters();
+            await loadConversations();
+        }
+
+        async function loadCharacters() {
+            const response = await fetch('http://localhost:8000/characters/popular');
+            const characters = await response.json();
+            const select = document.getElementById('characterSelect');
+            select.innerHTML = '<option value="">Select a character...</option>';
+            characters.forEach(char => {
+                select.innerHTML += `<option value="${char.id}">${char.name}</option>`;
+            });
+        }
+
+        async function loadConversations() {
+            const response = await fetch('http://localhost:8000/conversations/');
+            const conversations = await response.json();
+            const list = document.getElementById('conversationList');
+            list.innerHTML = '';
+            conversations.forEach(conv => {
+                const div = document.createElement('div');
+                div.className = `conversation-item ${conv.id === currentConversationId ? 'active' : ''}`;
+                div.onclick = () => loadConversation(conv.id);
+                div.innerHTML = `
+                    <strong>Character:</strong> ${conv.character_id}<br>
+                    <small>${new Date(conv.created_at).toLocaleString()}</small>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        async function createCharacter() {
+            const character = {
+                name: document.getElementById('charName').value,
+                system_prompt: document.getElementById('charSystem').value,
+                greeting: document.getElementById('charGreeting').value,
+                tagline: document.getElementById('charTagline').value,
+                photo_url: document.getElementById('charPhoto').value,
+                attributes: []
+            };
+
+            const response = await fetch('http://localhost:8000/characters/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(character)
+            });
+
+            if (response.ok) {
+                alert('Character created!');
+                loadCharacters();
+            } else {
+                alert('Error creating character');
+            }
+        }
+
+        async function loadCharacter() {
+            currentCharacterId = document.getElementById('characterSelect').value;
+            if (!currentCharacterId) return;
+
+            const response = await fetch(`http://localhost:8000/characters/${currentCharacterId}`);
+            const character = await response.json();
+            
+            document.getElementById('selectedCharInfo').innerHTML = `
+                <p><strong>${character.name}</strong></p>
+                <p>${character.tagline}</p>
+                <button onclick="startConversation()">Start New Chat</button>
+            `;
+        }
+
+        async function loadConversation(conversationId) {
+            currentConversationId = conversationId;
+            document.getElementById('chatInterface').style.display = 'block';
+            await loadMessages();
+            await loadConversations(); // Refresh list to show active state
+        }
+
+        async function startConversation() {
+            if (!currentCharacterId) return;
+
+            const response = await fetch('http://localhost:8000/conversations/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    character_id: parseInt(currentCharacterId),
+                    language: "EN"
+                })
+            });
+
+            if (response.ok) {
+                const conversationId = await response.json();
+                await loadConversation(conversationId);
+            }
+        }
+
+        async function loadMessages() {
+            if (!currentConversationId) return;
+
+            const response = await fetch(`http://localhost:8000/conversations/${currentConversationId}/messages`);
+            const messages = await response.json();
+            
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = '';
+            messages.forEach(msg => {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${msg.role}-message`;
+                messageDiv.textContent = msg.content;
+                messagesDiv.appendChild(messageDiv);
+            });
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+            // Update debug info
+            document.getElementById('debugInfo').innerHTML = `
+                Messages in conversation: ${messages.length}<br>
+                Current conversation ID: ${currentConversationId}
+            `;
+        }
+
+        async function sendMessage() {
+            if (!currentConversationId) return;
+
+            const messageInput = document.getElementById('messageInput');
+            const content = messageInput.value.trim();
+            if (!content) return;
+
+            messageInput.value = '';
+
+            try {
+                const response = await fetch(`http://localhost:8000/conversations/${currentConversationId}/messages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail);
+                }
+
+                await loadMessages();
+            } catch (error) {
+                alert(`Error sending message: ${error.message}`);
+            }
+        }
+
+        // Allow sending message with Enter key
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>

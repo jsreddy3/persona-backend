@@ -1,0 +1,116 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from typing import List
+import logging
+from pydantic import BaseModel
+from database.database import get_db
+from services.conversation_service import ConversationService
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/conversations", tags=["conversations"])
+
+class ConversationCreate(BaseModel):
+    character_id: int
+    language: str = "EN"  # Optional, defaults to English
+
+class MessageCreate(BaseModel):
+    content: str
+
+class MessageResponse(BaseModel):
+    id: int
+    role: str
+    content: str
+    
+    class Config:
+        from_attributes = True
+
+@router.post("/{conversation_id}/messages", response_model=List[MessageResponse])
+async def send_message(
+    conversation_id: int,
+    message: MessageCreate,
+    db: Session = Depends(get_db),
+    # In real app, get user_id from auth token
+    user_id: int = 1
+):
+    """
+    Send a message in a conversation and get the AI's response
+    Returns both the user's message and the AI's response
+    """
+    try:
+        service = ConversationService(db)
+        user_msg, ai_msg = service.process_user_message(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            message_content=message.content
+        )
+        return [user_msg, ai_msg]
+    except ValueError as e:
+        logger.error(f"Error sending message: {str(e)}")
+        raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        logger.error(f"Error sending message: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error sending message: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{conversation_id}/messages", response_model=List[MessageResponse])
+async def get_conversation_messages(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = 1
+):
+    try:
+        service = ConversationService(db)
+        messages = service.get_conversation_messages(conversation_id)
+        if not messages:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        return messages
+    except Exception as e:
+        logger.error(f"Error getting messages: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/")
+def get_conversations(
+    db: Session = Depends(get_db),
+    user_id: int = 1  # TODO: Get from auth
+):
+    """Get all conversations for the current user"""
+    try:
+        service = ConversationService(db)
+        conversations = service.repository.get_by_user_id(user_id)
+        return [
+            {
+                "id": conv.id,
+                "character_id": conv.character_id,
+                "created_at": conv.created_at
+            }
+            for conv in conversations
+        ]
+    except Exception as e:
+        logger.error(f"Error getting conversations: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/", response_model=int)
+async def create_conversation(
+    conversation: ConversationCreate,
+    db: Session = Depends(get_db),
+    user_id: int = 1
+):
+    try:
+        service = ConversationService(db)
+        conv = service.create_conversation(
+            character_id=conversation.character_id,
+            user_id=user_id,
+            language=conversation.language
+        )
+        return conv.id
+    except ValueError as e:
+        logger.error(f"Error creating conversation: {str(e)}")
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error creating conversation: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
