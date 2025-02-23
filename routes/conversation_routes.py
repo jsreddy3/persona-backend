@@ -95,6 +95,7 @@ async def get_conversations(
     try:
         service = ConversationService(db)
         conversations = service.repository.get_by_user_id(current_user.id)
+        logger.info(f"Getting all conversations for user {current_user.id}. Gotten this many: {len(conversations)}")
         return [
             {
                 "id": conv.id,
