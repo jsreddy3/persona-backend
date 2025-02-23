@@ -61,6 +61,8 @@ class WorldIDService:
                 logger.info(f"Verifying with World ID: {nullifier_hash}")
                 
                 response = await client.post(verify_url, json=verify_data)
+                print(f"World ID API response status: {response.status_code}")
+                print(f"World ID API response body: {response.text}")
                 response.raise_for_status()
                 
                 # Create/update user and verification
