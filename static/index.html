@@ -361,18 +361,14 @@
             messagesDiv.appendChild(aiMessageDiv);
             
             try {
-                const response = await fetch(`/api/conversations/${currentConversationId}/stream`, {
+                // First get a temporary stream token
+                const tokenResponse = await fetchWithAuth(`/conversations/${currentConversationId}/stream/token`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
-                    },
                     body: JSON.stringify({ content })
                 });
                 
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                const parser = new EventSource(`/api/conversations/${currentConversationId}/stream`);
+                // Then use the token to establish SSE connection
+                const parser = new EventSource(`${API_BASE_URL}/conversations/${currentConversationId}/stream?token=${tokenResponse.token}`);
                 
                 parser.addEventListener('token', (event) => {
                     aiMessageDiv.textContent += event.data;
@@ -381,7 +377,9 @@
                 
                 parser.addEventListener('error', (event) => {
                     console.error('Stream error:', event.data);
-                    aiMessageDiv.textContent += '\n[Error: Message streaming failed]';
+                    if (event.data) {  
+                        aiMessageDiv.textContent += '\n[Error: Message streaming failed]';
+                    }
                     parser.close();
                 });
                 

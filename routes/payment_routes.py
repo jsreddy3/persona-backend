@@ -11,7 +11,7 @@ from database.models import User, Payment
 from database.database import get_db
 from dependencies.auth import get_current_user
 
-router = APIRouter()
+router = APIRouter(tags=["payments"])  # Remove prefix, it's added in main.py
 
 class PaymentInitResponse(BaseModel):
     reference: str

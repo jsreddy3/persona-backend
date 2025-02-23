@@ -13,7 +13,7 @@ from services.world_id_service import WorldIDService
 from dependencies.auth import get_current_user
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(tags=["users"])
 
 class CreditPurchase(BaseModel):
     package: str  # "small", "medium", "large"
