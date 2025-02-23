@@ -38,12 +38,15 @@ def init_db():
         if not test_char:
             test_char = Character(
                 name="Test Character",
-                system_prompt="You are a friendly test character who helps users verify the chat system is working.",
+                character_description="You are a friendly test character who helps users verify the chat system is working.",
                 greeting="Hello! I'm a test character. Nice to meet you!",
                 tagline="I'm here to help test the system",
                 photo_url="https://example.com/test.jpg",
                 attributes=["test", "friendly", "helpful"],
-                creator_id=test_user.id if test_user else None
+                creator_id=test_user.id if test_user else None,
+                num_chats_created=0,
+                num_messages=0,
+                rating=0.0
             )
             db.add(test_char)
             print("Created test character!")

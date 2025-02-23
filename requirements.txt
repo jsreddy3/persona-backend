@@ -12,4 +12,3 @@ sse-starlette==1.8.2
 cloudinary==1.36.0
 python-magic==0.4.27
 python-multipart
-libmagic

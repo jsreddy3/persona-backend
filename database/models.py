@@ -43,7 +43,7 @@ class Character(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    system_prompt = Column(Text, nullable=False)
+    character_description = Column(Text, nullable=False)  # Character's description
     greeting = Column(Text, nullable=False)  # Character's initial greeting message
     tagline = Column(String)
     photo_url = Column(String)

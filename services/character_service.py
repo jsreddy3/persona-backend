@@ -10,26 +10,27 @@ class CharacterService:
     def create_character(
         self,
         name: str,
-        system_prompt: str,
+        character_description: str,
         greeting: str,
         creator_id: int,
         tagline: Optional[str] = None,
         photo_url: Optional[str] = None,
         attributes: List[str] = []
     ) -> Character:
-        """Create a new character with the given attributes"""
+        """Create a new character"""
         character_data = {
             "name": name,
-            "system_prompt": system_prompt,
+            "character_description": character_description,
             "greeting": greeting,
             "tagline": tagline,
             "photo_url": photo_url,
-            "attributes": attributes,
             "creator_id": creator_id,
             "num_chats_created": 0,
             "num_messages": 0,
-            "rating": 0.0
+            "rating": 0.0,
+            "attributes": attributes
         }
+        
         return self.repository.create(character_data)
     
     def get_popular_characters(self, page: int = 1, per_page: int = 10) -> List[Character]:

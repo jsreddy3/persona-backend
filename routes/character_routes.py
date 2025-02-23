@@ -1,17 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
 from database.database import get_db
 from database.models import User
 from services.character_service import CharacterService
-from services.image_service import ImageService  # Comment out for now
+from services.image_service import ImageService
+from services.image_generation_service import ImageGenerationService
 from dependencies.auth import get_current_user
 import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["characters"])  # Remove prefix, it's added in main.py
+router = APIRouter(tags=["characters"])  
 
 # Print routes being registered
 logger.info("Registering character routes:")
@@ -20,8 +21,8 @@ for route in router.routes:
 
 class CharacterCreate(BaseModel):
     name: str
-    system_prompt: str
-    greeting: str  # Character's initial greeting message
+    character_description: str
+    greeting: str
     tagline: Optional[str] = None
     photo_url: Optional[str] = None
     attributes: List[str] = []
@@ -29,16 +30,23 @@ class CharacterCreate(BaseModel):
 class CharacterResponse(BaseModel):
     id: int
     name: str
-    greeting: str  # Character's initial greeting message
-    tagline: Optional[str] = ""  # Make optional with default
-    photo_url: Optional[str] = ""  # Make optional with default
-    num_chats_created: int = 0  # Add default
-    num_messages: int = 0  # Add default
-    rating: float = 0.0  # Add default
-    attributes: List[str] = []  # Add default
+    character_description: str
+    greeting: str
+    tagline: Optional[str] = ""
+    photo_url: Optional[str] = ""
+    num_chats_created: int = 0
+    num_messages: int = 0
+    rating: float = 0.0
+    attributes: List[str] = []
     
     class Config:
-        orm_mode = True  # Use orm_mode in v1 instead of from_attributes
+        orm_mode = True  
+
+class GenerateImageRequest(BaseModel):
+    prompt: str
+    width: Optional[int] = 1024
+    height: Optional[int] = 1024
+    steps: Optional[int] = 20
 
 @router.post("/", response_model=CharacterResponse)
 async def create_character(
@@ -48,17 +56,57 @@ async def create_character(
 ):
     """Create a new character"""
     try:
+        # Create character
         service = CharacterService(db)
-        char = service.create_character(
+        new_character = service.create_character(
             name=character.name,
-            system_prompt=character.system_prompt,
+            character_description=character.character_description,
             greeting=character.greeting,
             tagline=character.tagline,
             photo_url=character.photo_url,
-            attributes=character.attributes,
-            creator_id=current_user.id
+            creator_id=current_user.id,
+            attributes=character.attributes
         )
-        return char
+        
+        # Generate initial image if none provided
+        if not new_character.photo_url:
+            try:
+                # Create a prompt combining name and description
+                prompt = f"A portrait of {character.name}. {character.character_description}"
+                
+                # Generate image
+                image_gen = ImageGenerationService()
+                image_data = image_gen.generate_image(prompt=prompt)
+                
+                if image_data:
+                    # Upload to cloudinary
+                    image_service = ImageService()
+                    url = image_service.upload_character_image(image_data, new_character.id)
+                    
+                    if url:
+                        # Update character
+                        new_character = service.update_character_image(new_character.id, url)
+                
+            except Exception as e:
+                logger.error(f"Failed to generate initial character image: {str(e)}")
+                # Continue without image if generation fails
+                pass
+        
+        # Create initial conversation
+        try:
+            from services.conversation_service import ConversationService
+            conv_service = ConversationService(db)
+            conv_service.create_conversation(
+                character_id=new_character.id,
+                user_id=current_user.id
+            )
+        except Exception as e:
+            logger.error(f"Failed to create initial conversation: {str(e)}")
+            # Continue even if conversation creation fails
+            pass
+        
+        return new_character
+        
     except Exception as e:
         logger.error(f"Error creating character: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -138,4 +186,43 @@ async def upload_character_image(
         
     except Exception as e:
         logger.error(f"Error uploading character image: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{character_id}/generate-image")
+async def generate_character_image(
+    character_id: int,
+    request: GenerateImageRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Generate an AI image for a character"""
+    try:
+        # Generate image
+        image_gen = ImageGenerationService()
+        image_data = image_gen.generate_image(
+            prompt=request.prompt,
+            width=request.width,
+            height=request.height,
+            steps=request.steps
+        )
+        
+        if not image_data:
+            raise HTTPException(status_code=400, detail="Failed to generate image")
+            
+        # Upload to cloudinary
+        image_service = ImageService()
+        url = image_service.upload_character_image(image_data, character_id)
+        if not url:
+            raise HTTPException(status_code=400, detail="Failed to upload generated image")
+            
+        # Update character
+        service = CharacterService(db)
+        character = service.update_character_image(character_id, url)
+        if not character:
+            raise HTTPException(status_code=400, detail="Failed to update character")
+            
+        return {"photo_url": url}
+        
+    except Exception as e:
+        logger.error(f"Error generating character image: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

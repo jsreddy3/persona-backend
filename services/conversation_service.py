@@ -36,7 +36,7 @@ class ConversationService:
         
         # Insert character description into system prompt
         system_prompt = system_prompt.format(
-            character_description=character.system_prompt
+            character_description=character.character_description
         )
         
         # Create conversation
