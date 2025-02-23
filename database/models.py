@@ -105,7 +105,7 @@ class Payment(Base):
 
 class WorldIDVerification(Base):
     __tablename__ = "world_id_verifications"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey('users.id'))
     nullifier_hash = Column(String, nullable=False, index=True)

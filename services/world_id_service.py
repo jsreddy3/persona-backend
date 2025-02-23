@@ -40,6 +40,7 @@ class WorldIDService:
                         "merkle_root": existing.merkle_root
                     },
                     "user": {
+                        "id": user.id,
                         "world_id": user.world_id,
                         "language": user.language
                     }
@@ -77,6 +78,7 @@ class WorldIDService:
                     "success": True,
                     "verification": response.json(),
                     "user": {
+                        "id": user.id,
                         "world_id": user.world_id,
                         "language": user.language
                     }

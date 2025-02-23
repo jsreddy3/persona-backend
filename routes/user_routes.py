@@ -142,14 +142,9 @@ async def verify_world_id(
             language=request.language
         )
         
-        # Get user from database to create session
-        user = db.query(User).filter(User.world_id == request.nullifier_hash).first()
-        if not user:
-            raise ValueError("User not found after verification")
-            
         # Create session token after successful verification
-        from dependencies.auth import create_session
-        session_token = create_session(user.id, db)
+        # The user is already created/updated by WorldIDService
+        session_token = create_session(result["user"]["id"], db)
         
         # Return both the verification result and session token
         return {
