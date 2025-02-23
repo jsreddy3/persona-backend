@@ -25,8 +25,10 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "https://localhost:3000",
-        "https://persona-ai.vercel.app", 
-        "https://frontend-persona-nine.vercel.app" 
+        "https://persona-ai.vercel.app",
+        "https://backend-persona.herokuapp.com",
+        "https://backend-persona-da6c29e3bf72.herokuapp.com",
+        "https://frontend-persona-nine.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
