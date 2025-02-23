@@ -23,6 +23,7 @@ class ImageService:
         Returns the URL of the uploaded image
         """
         try:
+            logger.info(f"Starting image upload for character {character_id}")
             # Simple check for image data by looking at first few bytes
             image_signatures = {
                 b'\xFF\xD8\xFF': 'image/jpeg',
@@ -33,15 +34,21 @@ class ImageService:
             }
             
             is_valid_image = False
+            detected_type = None
             for signature, mime_type in image_signatures.items():
                 if image_data.startswith(signature):
                     is_valid_image = True
+                    detected_type = mime_type
                     break
                     
             if not is_valid_image:
+                logger.error(f"Invalid image format. First few bytes: {image_data[:20].hex()}")
                 raise ValueError("Invalid image file format")
             
+            logger.info(f"Valid image detected of type: {detected_type}")
+            
             # Upload to cloudinary with optimization
+            logger.info("Starting Cloudinary upload...")
             result = cloudinary.uploader.upload(
                 image_data,
                 public_id=f"character_{character_id}",
@@ -49,16 +56,21 @@ class ImageService:
                 overwrite=True,
                 resource_type="image",
                 transformation=[
-                    {"width": 1024, "height": 1024, "crop": "fill"},
                     {"quality": "auto:good"},
                     {"fetch_format": "auto"}
                 ]
             )
             
-            return result['secure_url']
-            
+            if 'secure_url' in result:
+                url = result['secure_url']
+                logger.info(f"Upload successful. URL: {url}")
+                return url
+            else:
+                logger.error(f"Upload failed. Result: {result}")
+                return None
+                
         except Exception as e:
-            logger.error(f"Failed to upload image: {str(e)}")
+            logger.error(f"Failed to upload image: {str(e)}", exc_info=True)
             return None
     
     def delete_character_image(self, character_id: int) -> bool:

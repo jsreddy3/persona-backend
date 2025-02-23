@@ -32,6 +32,7 @@ class ImageGenerationService:
             Image data as bytes or None if generation failed
         """
         try:
+            logger.info("Preparing getimg.ai API request")
             url = "https://api.getimg.ai/v1/stable-diffusion-xl/text-to-image"
             
             headers = {
@@ -45,13 +46,19 @@ class ImageGenerationService:
                 "height": height,
                 "steps": steps
             }
-
-            response = requests.post(url, headers=headers, json=data)
-            response.raise_for_status()
             
-            # The API returns base64 encoded image data
-            return base64.b64decode(response.json()['image'])
+            logger.info(f"Making API request to {url}")
+            response = requests.post(url, headers=headers, json=data)
+            
+            if response.status_code != 200:
+                logger.error(f"API request failed with status {response.status_code}: {response.text}")
+                response.raise_for_status()
+            
+            logger.info("API request successful, decoding image data")
+            image_data = base64.b64decode(response.json()["image"])
+            logger.info(f"Successfully decoded {len(image_data)} bytes of image data")
+            return image_data
             
         except Exception as e:
-            logger.error(f"Failed to generate image: {str(e)}")
+            logger.error(f"Failed to generate image: {str(e)}", exc_info=True)
             return None
