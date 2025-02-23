@@ -12,4 +12,5 @@ sse-starlette==1.8.2
 cloudinary==1.36.0
 python-magic==0.4.27
 python-multipart
-web3==5.29.2
+web3==6.11.4
+parsimonious==0.10.0
