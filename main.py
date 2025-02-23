@@ -22,10 +22,16 @@ app = FastAPI(title="PersonaAI API")
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://localhost:3000",
+        "https://persona-ai.vercel.app", 
+        "https://frontend-persona-nine.vercel.app" 
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Mount static files
