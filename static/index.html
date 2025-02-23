@@ -142,9 +142,7 @@
 
     <script>
         // API base URL - change this to your Heroku app URL when deploying
-        const API_BASE_URL = window.location.hostname === 'localhost' 
-            ? 'http://localhost:8000'
-            : 'https://backend-persona-da6c29e3bf72.herokuapp.com';
+        const API_BASE_URL = window.location.origin + '/api';
 
         // Test World ID credentials
         const TEST_CREDENTIALS = {
@@ -177,7 +175,7 @@
 
         async function loadCharacters() {
             try {
-                const characters = await fetchWithAuth('/characters/popular');
+                const characters = await fetchWithAuth('/characters/list/popular');
                 const select = document.getElementById('characterSelect');
                 select.innerHTML = '<option value="">Select a character...</option>';
                 
@@ -247,12 +245,14 @@
         async function loadCharacter() {
             const characterId = document.getElementById('characterSelect').value;
             if (!characterId) return;
-
+            
             try {
-                const character = await fetchWithAuth(`/characters/${characterId}`);
-                document.getElementById('characterInfo').innerHTML = `
+                const character = await fetchWithAuth(`/characters/detail/${characterId}`);
+                const characterInfo = document.getElementById('characterInfo');
+                characterInfo.innerHTML = `
                     <h2>${character.name}</h2>
                     <p>${character.tagline || ''}</p>
+                    ${character.photo_url ? `<img src="${character.photo_url}" alt="${character.name}">` : ''}
                 `;
             } catch (error) {
                 console.error('Failed to load character:', error);
@@ -361,7 +361,7 @@
             messagesDiv.appendChild(aiMessageDiv);
             
             try {
-                const response = await fetch(`/conversations/${currentConversationId}/stream`, {
+                const response = await fetch(`/api/conversations/${currentConversationId}/stream`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -372,7 +372,7 @@
                 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
-                const parser = new EventSource(`/conversations/${currentConversationId}/stream`);
+                const parser = new EventSource(`/api/conversations/${currentConversationId}/stream`);
                 
                 parser.addEventListener('token', (event) => {
                     aiMessageDiv.textContent += event.data;

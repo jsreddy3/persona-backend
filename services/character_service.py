@@ -48,3 +48,11 @@ class CharacterService:
     def get_stats(self, character_id: int) -> Optional[dict]:
         """Get character statistics"""
         return self.repository.get_character_stats(character_id)
+    
+    def update_character_image(self, character_id: int, photo_url: str) -> Optional[Character]:
+        """Update a character's photo URL"""
+        character = self.repository.get_by_id(character_id)
+        if not character:
+            return None
+            
+        return self.repository.update(character_id, {"photo_url": photo_url})

@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
 from database.database import get_db
 from database.models import User
 from services.character_service import CharacterService
+from services.image_service import ImageService
 from dependencies.auth import get_current_user
 import logging
 
@@ -57,36 +58,33 @@ async def create_character(
         logger.error(f"Error creating character: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/popular", response_model=List[CharacterResponse])
+@router.get("/list/popular", response_model=List[CharacterResponse])
 async def get_popular_characters(
-    page: int = 1,
-    per_page: int = 10,
     db: Session = Depends(get_db)
 ):
-    """Get popular characters"""
+    """Get list of popular characters"""
     try:
         service = CharacterService(db)
-        characters = service.get_popular_characters(page=page, per_page=per_page)
-        return characters
+        return service.get_popular_characters()
     except Exception as e:
-        logger.error(f"Error getting popular characters: {e}")
+        logger.error(f"Error getting popular characters: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/{character_id}", response_model=CharacterResponse)
+@router.get("/detail/{character_id}", response_model=CharacterResponse)
 async def get_character(
     character_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get a character by ID"""
+    """Get character details by ID"""
     try:
         service = CharacterService(db)
-        character = service.get_character_details(character_id)  
+        character = service.get_character(character_id)  
         if not character:
             raise HTTPException(status_code=404, detail="Character not found")
         return character
     except Exception as e:
-        logger.error(f"Error getting character: {str(e)}")
+        logger.error(f"Error getting character {character_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{character_id}/stats")
@@ -101,4 +99,34 @@ async def get_character_stats(
         return stats
     except Exception as e:
         logger.error(f"Error getting character stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{character_id}/image")
+async def upload_character_image(
+    character_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload a character's image"""
+    try:
+        # Read file
+        contents = await file.read()
+        
+        # Upload image
+        image_service = ImageService()
+        url = image_service.upload_character_image(contents, character_id)
+        if not url:
+            raise HTTPException(status_code=400, detail="Failed to upload image")
+            
+        # Update character
+        service = CharacterService(db)
+        character = service.update_character_image(character_id, url)
+        if not character:
+            raise HTTPException(status_code=404, detail="Character not found")
+            
+        return {"photo_url": url}
+        
+    except Exception as e:
+        logger.error(f"Error uploading character image: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

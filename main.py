@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import os
 from routes import character_routes
 from routes import user_routes
@@ -10,35 +11,29 @@ from database.init_db import init_db
 
 app = FastAPI(title="PersonaAI API")
 
-# Add CORS middleware
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",  # Local frontend
-        "http://localhost:8000",  # Local backend static files
-        "https://backend-persona-da6c29e3bf72.herokuapp.com"  # Heroku domain
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Create static directory if it doesn't exist
-static_dir = os.path.join(os.path.dirname(__file__), "static")
-os.makedirs(static_dir, exist_ok=True)
-
 # Mount static files
-app.mount("/static", StaticFiles(directory=static_dir), name="static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Root path redirects to index.html
+@app.get("/")
+async def root():
+    return FileResponse("static/index.html")
+
+# Include routers with API prefix
+api_prefix = "/api"
+app.include_router(user_routes.router, prefix=f"{api_prefix}/users", tags=["users"])
+app.include_router(character_routes.router, prefix=f"{api_prefix}/characters", tags=["characters"])
+app.include_router(conversation_routes.router, prefix=f"{api_prefix}/conversations", tags=["conversations"])
+app.include_router(payment_routes.router, prefix=f"{api_prefix}/payments", tags=["payments"])
 
 # Initialize database
 init_db()
-
-# Include routers
-app.include_router(user_routes.router, prefix="/users", tags=["users"])
-app.include_router(character_routes.router, prefix="/characters", tags=["characters"])
-app.include_router(conversation_routes.router, prefix="/conversations", tags=["conversations"])
-app.include_router(payment_routes.router, prefix="/payments", tags=["payments"])
-
-@app.get("/")
-async def root():
-    return {"message": "Welcome to PersonaAI API"}
