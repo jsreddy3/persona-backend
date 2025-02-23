@@ -14,36 +14,63 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Create FastAPI app
 app = FastAPI(title="PersonaAI API")
 
-# Configure CORS
+# Configure CORS - keep it simple first
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Debug: Print middleware
+logger.info("Registered middleware:")
+for middleware in app.user_middleware:
+    logger.info(f"Middleware: {middleware}")
+
+# API prefix
+api_prefix = "/api"
+
+# Include routers
+app.include_router(
+    user_routes.router,
+    prefix=f"{api_prefix}/users",
+    tags=["users"]
+)
+app.include_router(
+    character_routes.router,
+    prefix=f"{api_prefix}/characters",
+    tags=["characters"]
+)
+app.include_router(
+    conversation_routes.router,
+    prefix=f"{api_prefix}/conversations",
+    tags=["conversations"]
+)
+app.include_router(
+    payment_routes.router,
+    prefix=f"{api_prefix}/payments",
+    tags=["payments"]
+)
+
 # Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+os.makedirs(static_dir, exist_ok=True)
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Root path redirects to index.html
 @app.get("/")
 async def root():
     return FileResponse("static/index.html")
 
-# Include routers with API prefix
-api_prefix = "/api"
-app.include_router(user_routes.router, prefix=f"{api_prefix}/users", tags=["users"])
-app.include_router(character_routes.router, prefix=f"{api_prefix}/characters", tags=["characters"])
-app.include_router(conversation_routes.router, prefix=f"{api_prefix}/conversations", tags=["conversations"])
-app.include_router(payment_routes.router, prefix=f"{api_prefix}/payments", tags=["payments"])
-
 # Print all registered routes for debugging
+logger.info("Registered routes:")
 for route in app.routes:
-    if hasattr(route, 'methods'):  # Only log actual routes, not mounted apps
-        logger.info(f"Registered route: {route.path} [{','.join(route.methods)}]")
+    if hasattr(route, 'methods'):
+        logger.info(f"Route: {route.path} [{','.join(route.methods)}]")
 
 # Initialize database
 init_db()
