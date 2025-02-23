@@ -17,6 +17,7 @@ def init_db():
                 world_id="test_nullifier_123",
                 language="en",
                 credits=100,
+                wallet_address="0xTestWalletAddress123",  # Adding test wallet address
                 created_at=datetime.utcnow(),
                 last_active=datetime.utcnow()
             )
