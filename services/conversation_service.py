@@ -79,6 +79,11 @@ class ConversationService:
         if conversation.creator_id != user_id and user_id not in [p.id for p in conversation.participants]:
             raise ValueError("User does not have access to this conversation")
         
+        # Check user credits
+        user = self.user_repository.get_by_id(user_id)
+        if user.credits < 1:
+            raise ValueError("Insufficient credits. Please purchase more credits to continue chatting.")
+        
         try:
             # Get conversation history before adding new message
             history = self.get_conversation_messages(conversation_id)
@@ -102,6 +107,9 @@ class ConversationService:
                 role="assistant",
                 content=ai_response
             )
+            
+            # Deduct credit after successful message exchange
+            user.credits -= 1
             
             # Commit the transaction
             self.db.commit()

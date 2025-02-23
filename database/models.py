@@ -77,6 +77,18 @@ class User(Base):
     created_conversations = relationship("Conversation", back_populates="creator")
     participated_conversations = relationship("Conversation", secondary=user_conversations, back_populates="participants")
     verifications = relationship("WorldIDVerification", back_populates="user")
+    payments = relationship("Payment", backref="user")
+
+class Payment(Base):
+    __tablename__ = "payments"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    reference = Column(String, unique=True, index=True)  # Unique payment reference
+    user_id = Column(Integer, ForeignKey("users.id"))
+    status = Column(String)  # pending, confirmed, failed
+    amount = Column(Integer)  # Amount in credits
+    transaction_id = Column(String, nullable=True)  # World ID transaction ID
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class WorldIDVerification(Base):
     __tablename__ = "world_id_verifications"

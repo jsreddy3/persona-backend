@@ -5,6 +5,7 @@ import os
 from routes import character_routes
 from routes import user_routes
 from routes import conversation_routes
+from routes import payment_routes
 from database.init_db import init_db
 
 app = FastAPI(title="PersonaAI API")
@@ -33,9 +34,10 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 init_db()
 
 # Include routers
-app.include_router(character_routes.router)
-app.include_router(user_routes.router)
-app.include_router(conversation_routes.router)
+app.include_router(user_routes.router, prefix="/users", tags=["users"])
+app.include_router(character_routes.router, prefix="/characters", tags=["characters"])
+app.include_router(conversation_routes.router, prefix="/conversations", tags=["conversations"])
+app.include_router(payment_routes.router, prefix="/payments", tags=["payments"])
 
 @app.get("/")
 async def root():
