@@ -11,6 +11,7 @@ from repositories.user_repository import UserRepository
 from services.user_service import UserService
 from services.world_id_service import WorldIDService
 from dependencies.auth import get_current_user, create_session
+from web3 import Web3
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["users"])
@@ -36,6 +37,12 @@ class WorldIDCredentials(BaseModel):
     merkle_root: str
     proof: str
     verification_level: str
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    email: Optional[str] = None
+    language: Optional[str] = None
+    wallet_address: Optional[str] = None
 
 async def verify_world_id_credentials(
     request: Request,
@@ -188,4 +195,29 @@ async def get_user_stats(
         }
     except Exception as e:
         logger.error(f"Error getting user stats: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/update", response_model=UserResponse)
+async def update_user(
+    user_update: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Update user profile"""
+    try:
+        # Validate wallet address if provided
+        if user_update.wallet_address:
+            if not Web3.is_address(user_update.wallet_address):
+                raise HTTPException(status_code=400, detail="Invalid Ethereum address")
+            # Convert to checksum address
+            user_update.wallet_address = Web3.to_checksum_address(user_update.wallet_address)
+            
+        service = UserService(db)
+        updated_user = service.update_user(
+            current_user.id,
+            user_update.dict(exclude_unset=True)
+        )
+        return updated_user
+    except Exception as e:
+        logger.error(f"Error updating user: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

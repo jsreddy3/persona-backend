@@ -8,6 +8,7 @@ class UserService:
     def __init__(self, db: Session):
         self.user_repository = UserRepository(db)
         self.character_repository = CharacterRepository(db)
+        self.db = db
         
     def consume_credits(self, user_id: int, amount: int) -> Optional[User]:
         """
@@ -76,3 +77,25 @@ class UserService:
         # 3. Add credits if payment successful
         
         return self.add_credits(user_id, credit_packages[package])
+
+    def update_user(self, user_id: int, update_data: dict) -> User:
+        """
+        Update user profile
+        """
+        try:
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if not user:
+                raise ValueError("User not found")
+                
+            # Update user fields
+            for key, value in update_data.items():
+                if hasattr(user, key):
+                    setattr(user, key, value)
+            
+            self.db.commit()
+            self.db.refresh(user)
+            return user
+            
+        except Exception as e:
+            self.db.rollback()
+            raise e

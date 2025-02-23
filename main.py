@@ -3,10 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import os
-from routes import character_routes
-from routes import user_routes
-from routes import conversation_routes
-from routes import payment_routes
+from routes import (
+    user_routes,
+    character_routes,
+    conversation_routes,
+    payment_routes,
+    token_routes
+)
 from database.init_db import init_db
 import logging
 
@@ -39,6 +42,7 @@ app.include_router(user_routes.router, prefix=f"{api_prefix}/users", tags=["user
 app.include_router(character_routes.router, prefix=f"{api_prefix}/characters", tags=["characters"])
 app.include_router(conversation_routes.router, prefix=f"{api_prefix}/conversations", tags=["conversations"])
 app.include_router(payment_routes.router, prefix=f"{api_prefix}/payments", tags=["payments"])
+app.include_router(token_routes.router, prefix=f"{api_prefix}/tokens", tags=["tokens"])
 
 # Print all registered routes for debugging
 for route in app.routes:
