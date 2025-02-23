@@ -75,10 +75,54 @@
             border-bottom: 1px solid #ddd;
         }
 
-        #characterInfo img {
-            max-width: 100%;
-            border-radius: 8px;
-            margin-top: 0.5rem;
+        #characterInfo .character-image-container {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            margin: 1rem auto;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #f0f0f0;
+        }
+
+        #characterInfo .character-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #characterInfo .upload-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 0.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            opacity: 0;
+        }
+
+        #characterInfo .character-image-container:hover .upload-overlay {
+            opacity: 1;
+        }
+
+        #characterInfo .upload-button {
+            display: block;
+            width: 100%;
+            padding: 0.5rem;
+            margin-top: 1rem;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        #characterInfo .upload-button:hover {
+            background: #0056b3;
         }
 
         #conversationList {
@@ -427,7 +471,19 @@
                 characterInfo.innerHTML = `
                     <h2>${character.name}</h2>
                     <p>${character.tagline || ''}</p>
-                    ${character.photo_url ? `<img src="${character.photo_url}" alt="${character.name}">` : ''}
+                    <div class="character-image-container">
+                        ${character.photo_url 
+                            ? `<img class="character-image" src="${character.photo_url}" alt="${character.name}">`
+                            : `<div style="height: 100%; display: flex; align-items: center; justify-content: center; color: #666;">No Image</div>`
+                        }
+                        <div class="upload-overlay" onclick="document.getElementById('imageUpload').click()">
+                            Change Image
+                        </div>
+                    </div>
+                    <button class="upload-button" onclick="document.getElementById('imageUpload').click()">
+                        ${character.photo_url ? 'Change Character Image' : 'Upload Character Image'}
+                    </button>
+                    <input type="file" id="imageUpload" style="display: none" accept="image/*" onchange="uploadCharacterImage(event)">
                 `;
 
                 // Load conversations for this character
@@ -683,6 +739,65 @@
                 document.getElementById('userStats').textContent = `Credits: ${stats.credits}`;
             } catch (error) {
                 console.error('Failed to load user stats:', error);
+            }
+        }
+
+        async function uploadCharacterImage(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const characterId = document.getElementById('characterSelect').value;
+            if (!characterId) return;
+
+            console.log('Uploading file:', file);
+            console.log('Character ID:', characterId);
+
+            // Create FormData
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            // Log form data contents
+            for (let pair of formData.entries()) {
+                console.log('Form Data:', pair[0], pair[1]);
+            }
+
+            try {
+                // Add auth headers but don't set Content-Type (let browser set it for multipart)
+                const headers = {};
+                if (sessionToken) {
+                    headers['Authorization'] = `Bearer ${sessionToken}`;
+                }
+                // Fallback to World ID credentials if no session token
+                else if (currentUser?.credentials) {
+                    headers['X-WorldID-Credentials'] = JSON.stringify(currentUser.credentials);
+                }
+                // Use test credentials if nothing else available
+                else {
+                    headers['X-WorldID-Credentials'] = JSON.stringify(TEST_CREDENTIALS);
+                }
+
+                const response = await fetch(`/api/characters/${characterId}/image`, {
+                    method: 'POST',
+                    body: formData,
+                    headers,
+                    credentials: 'include' // Include cookies
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('Upload error details:', errorData);
+                    throw new Error(`Failed to upload image: ${JSON.stringify(errorData)}`);
+                }
+
+                const result = await response.json();
+                console.log('Upload success:', result);
+                
+                // Reload the character to show the new image
+                await loadCharacter();
+                
+            } catch (error) {
+                console.error('Error uploading image:', error);
+                alert('Failed to upload image. Please try again.');
             }
         }
 

@@ -53,6 +53,7 @@ def get_session(token: str, db: Session) -> Optional[DbSession]:
 security = HTTPBearer(auto_error=False)
 
 async def get_current_user(
+    request: Request,
     session_token: str = Cookie(None),
     session_token_query: str = Query(None, alias="session_token"),
     credentials: HTTPAuthorizationCredentials = Depends(security),

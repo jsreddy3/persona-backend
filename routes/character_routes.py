@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from database.database import get_db
 from database.models import User
 from services.character_service import CharacterService
-# from services.image_service import ImageService  # Comment out for now
+from services.image_service import ImageService  # Comment out for now
 from dependencies.auth import get_current_user
 import logging
 
@@ -115,22 +115,26 @@ async def upload_character_image(
 ):
     """Upload a character's image"""
     try:
+        # Print debug info
+        print(f"Received file: {file.filename}")
+        
         # Read file
         contents = await file.read()
+        print(f"Read {len(contents)} bytes")
         
         # Upload image
-        # image_service = ImageService()
-        # url = image_service.upload_character_image(contents, character_id)
-        # if not url:
-        #     raise HTTPException(status_code=400, detail="Failed to upload image")
+        image_service = ImageService()
+        url = image_service.upload_character_image(contents, character_id)
+        if not url:
+            raise HTTPException(status_code=400, detail="Failed to upload image")
             
         # Update character
         service = CharacterService(db)
-        # character = service.update_character_image(character_id, url)
-        # if not character:
-        #     raise HTTPException(status_code=404, detail="Character not found")
+        character = service.update_character_image(character_id, url)
+        if not character:
+            raise HTTPException(status_code=400, detail="Failed to update character")
             
-        return {"photo_url": ""}
+        return {"photo_url": url}
         
     except Exception as e:
         logger.error(f"Error uploading character image: {str(e)}")
