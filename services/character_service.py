@@ -37,7 +37,7 @@ class CharacterService:
         skip = (page - 1) * per_page
         return self.repository.get_by_popularity(skip=skip, limit=per_page)
     
-    def get_character_details(self, character_id: int) -> Optional[Character]:
+    def get_character(self, character_id: int) -> Optional[Character]:
         """Get character details by ID"""
         return self.repository.get_by_id(character_id)
     

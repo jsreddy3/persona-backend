@@ -10,7 +10,7 @@ from database.models import User, WorldIDVerification
 from repositories.user_repository import UserRepository
 from services.user_service import UserService
 from services.world_id_service import WorldIDService
-from dependencies.auth import get_current_user
+from dependencies.auth import get_current_user, create_session
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["users"])
@@ -122,6 +122,7 @@ async def verify_world_id(
 ):
     """Verify a World ID proof and create/update user"""
     try:
+        logger.info(f"Verifying request: {request}")
         user_repo = UserRepository(db)
         world_id_service = WorldIDService(user_repo)
         
@@ -134,18 +135,36 @@ async def verify_world_id(
             language=request.language
         )
         
-        return result
+        # Get user from database to create session
+        user = db.query(User).filter(User.world_id == request.nullifier_hash).first()
+        if not user:
+            raise ValueError("User not found after verification")
+            
+        # Create session token after successful verification
+        from dependencies.auth import create_session
+        session_token = create_session(user.id, db)
+        
+        # Return both the verification result and session token
+        return {
+            **result,
+            "session_token": session_token
+        }
         
     except ValueError as e:
+        logger.error(f"Verification error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user(
+async def get_current_user_info(
     current_user: User = Depends(get_current_user)
 ):
     """Get the current user's information"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+        
     return UserResponse(
         world_id=current_user.world_id,
         language=current_user.language,
@@ -159,9 +178,12 @@ async def get_user_stats(
 ):
     """Get user stats"""
     try:
+        # Get total conversations (created + participated)
+        total_conversations = len(set(current_user.created_conversations + current_user.participated_conversations))
+        
         return {
             "credits": current_user.credits,
-            "conversations": len(current_user.conversations),
+            "conversations": total_conversations,
             "characters": len(current_user.created_characters)
         }
     except Exception as e:

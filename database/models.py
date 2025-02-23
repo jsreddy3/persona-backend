@@ -78,6 +78,18 @@ class User(Base):
     participated_conversations = relationship("Conversation", secondary=user_conversations, back_populates="participants")
     verifications = relationship("WorldIDVerification", back_populates="user")
     payments = relationship("Payment", backref="user")
+    sessions = relationship("Session", back_populates="user")
+
+class Session(Base):
+    __tablename__ = "sessions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String, unique=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    expires = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User", back_populates="sessions")
 
 class Payment(Base):
     __tablename__ = "payments"

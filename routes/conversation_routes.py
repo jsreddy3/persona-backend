@@ -7,7 +7,6 @@ from database.models import User
 from services.conversation_service import ConversationService
 from dependencies.auth import get_current_user
 import logging
-import secrets
 import time
 from sse_starlette.sse import EventSourceResponse
 
@@ -32,9 +31,6 @@ class MessageResponse(BaseModel):
     class Config:
         orm_mode = True  # Use orm_mode in v1 instead of from_attributes
 
-# Store temporary stream tokens with expiry
-_stream_tokens = {}
-
 @router.post("/{conversation_id}/stream/token")
 async def get_stream_token(
     conversation_id: int,
@@ -43,14 +39,7 @@ async def get_stream_token(
     current_user: User = Depends(get_current_user)
 ):
     """Get a temporary token for streaming"""
-    token = secrets.token_urlsafe(32)
-    _stream_tokens[token] = {
-        "user_id": current_user.id,
-        "conversation_id": conversation_id,
-        "content": message.content,
-        "expires": time.time() + 30  # Token expires in 30 seconds
-    }
-    return {"token": token}
+    return {"token": "removed"}
 
 @router.post("/{conversation_id}/messages", response_model=List[MessageResponse])
 async def send_message(
@@ -142,34 +131,24 @@ async def create_conversation(
 @router.get("/{conversation_id}/stream", response_class=EventSourceResponse)
 async def stream_message(
     conversation_id: int,
-    token: str = Query(...),
-    db: Session = Depends(get_db)
+    content: str,
+    session_token: str = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Stream a message in a conversation and get the AI's response token by token
     Returns a stream of SSE events containing tokens
     """
     try:
-        # Verify and consume token
-        if token not in _stream_tokens:
-            raise HTTPException(status_code=401, detail="Invalid or expired stream token")
-        
-        stream_data = _stream_tokens.pop(token)  # Remove token so it can't be reused
-        
-        if time.time() > stream_data["expires"]:
-            raise HTTPException(status_code=401, detail="Stream token expired")
-            
-        if stream_data["conversation_id"] != conversation_id:
-            raise HTTPException(status_code=401, detail="Invalid conversation ID")
-        
         service = ConversationService(db)
         
         async def event_generator():
             try:
                 async for token in service.stream_user_message(
-                    user_id=stream_data["user_id"],
+                    user_id=current_user.id,
                     conversation_id=conversation_id,
-                    message_content=stream_data["content"]
+                    message_content=content
                 ):
                     yield {
                         "event": "token",

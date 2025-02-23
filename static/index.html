@@ -1,150 +1,240 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>PersonaAI Chat</title>
+    <title>Persona AI Chat</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            max-width: 1200px;
-            margin: 20px auto;
-            padding: 0 20px;
-            display: grid;
-            grid-template-columns: 300px 1fr;
-            gap: 20px;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
-        .sidebar {
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 5px;
+
+        #app {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
         }
-        .main-content {
-            padding: 20px;
+
+        #loginSection {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
         }
-        .character-form, .chat-interface {
-            margin-bottom: 20px;
-            padding: 20px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
+
+        #loginSection.hidden {
+            display: none;
         }
-        .message {
-            margin: 10px 0;
-            padding: 10px;
-            border-radius: 5px;
+
+        .login-box {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 300px;
         }
-        .user-message {
-            background-color: #e3f2fd;
-            margin-left: 20%;
+
+        .login-box h2 {
+            margin-top: 0;
+            margin-bottom: 1.5rem;
+            text-align: center;
         }
-        .assistant-message {
-            background-color: #f5f5f5;
-            margin-right: 20%;
+
+        #sidebar {
+            width: 300px;
+            background: #f5f5f5;
+            border-right: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
         }
-        .chat-messages {
-            height: 400px;
+
+        #userInfo {
+            padding: 1rem;
+            border-bottom: 1px solid #ddd;
+            background: white;
+        }
+
+        #characterSelect {
+            margin: 1rem;
+            padding: 0.5rem;
+            width: calc(100% - 2rem);
+        }
+
+        #characterInfo {
+            padding: 1rem;
+            border-bottom: 1px solid #ddd;
+        }
+
+        #characterInfo img {
+            max-width: 100%;
+            border-radius: 8px;
+            margin-top: 0.5rem;
+        }
+
+        #conversationList {
+            flex: 1;
             overflow-y: auto;
+            padding: 1rem;
+        }
+
+        .conversation-item {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .conversation-item:hover {
+            background: #eee;
+        }
+
+        .conversation-item.active {
+            background: #e3e3e3;
+        }
+
+        #mainContent {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+        }
+
+        #messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            background: #f9f9f9;
+        }
+
+        .message {
+            max-width: 80%;
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            border-radius: 8px;
+            white-space: pre-wrap;
+        }
+
+        .user-message {
+            background: #007AFF;
+            color: white;
+            margin-left: auto;
+        }
+
+        .assistant-message {
+            background: #E9E9EB;
+            color: black;
+            margin-right: auto;
+        }
+
+        #inputArea {
+            padding: 1rem;
+            background: white;
+            border-top: 1px solid #ddd;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        #messageInput {
+            flex: 1;
+            padding: 0.75rem;
             border: 1px solid #ddd;
-            padding: 10px;
-            margin-bottom: 10px;
+            border-radius: 20px;
+            outline: none;
+            font-size: 1rem;
         }
-        input[type="text"], textarea {
-            width: 100%;
-            padding: 8px;
-            margin: 5px 0;
-            box-sizing: border-box;
-        }
+
         button {
-            padding: 8px 16px;
-            background-color: #4CAF50;
+            padding: 0.75rem 1.5rem;
+            background: #007AFF;
             color: white;
             border: none;
-            border-radius: 4px;
+            border-radius: 20px;
             cursor: pointer;
-            margin: 5px 0;
+            font-size: 1rem;
+            transition: background 0.2s;
         }
+
         button:hover {
-            background-color: #45a049;
+            background: #0056b3;
         }
-        .conversation-list {
-            margin-top: 20px;
-            border-top: 1px solid #ddd;
-            padding-top: 10px;
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
         }
-        .conversation-item {
-            padding: 10px;
-            margin: 5px 0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        .conversation-item:hover {
-            background-color: #f0f0f0;
-        }
-        .conversation-item.active {
-            background-color: #e3f2fd;
-        }
-        .debug-info {
-            font-family: monospace;
-            font-size: 12px;
-            color: #666;
-            margin-top: 10px;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 4px;
-        }
-        .character-select-container {
-            margin-bottom: 20px;
-        }
-        .character-select-container select {
-            width: 100%;
-            padding: 8px;
-            margin: 5px 0;
+
+        .error {
+            color: red;
+            margin: 0.5rem 0;
         }
     </style>
 </head>
 <body>
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <h2>Characters</h2>
-        <div class="character-select-container">
+    <div id="loginSection">
+        <div class="login-box">
+            <h2>Login with World ID</h2>
+            <div id="worldIDWidget"></div>
+            <div id="loginError" class="error"></div>
+        </div>
+    </div>
+
+    <div id="app">
+        <div id="sidebar">
+            <div id="userInfo">
+                <h3>Welcome!</h3>
+                <div id="userStats"></div>
+            </div>
             <select id="characterSelect" onchange="loadCharacter()">
                 <option value="">Select a character...</option>
             </select>
-            <button onclick="startConversation()">Start New Conversation</button>
-        </div>
-        
-        <div class="character-form">
-            <h3>Create Character</h3>
-            <input type="text" id="characterName" placeholder="Character name">
-            <textarea id="systemPrompt" placeholder="System prompt"></textarea>
-            <textarea id="greeting" placeholder="Greeting message"></textarea>
-            <input type="text" id="tagline" placeholder="Tagline">
-            <input type="text" id="photoUrl" placeholder="Photo URL">
-            <button onclick="createCharacter()">Create Character</button>
-        </div>
-        
-        <div class="conversation-list" id="conversationList">
-            <!-- Conversations will be loaded here -->
-        </div>
-    </div>
-
-    <!-- Main Content -->
-    <div class="main-content">
-        <div id="characterInfo"></div>
-        <div class="chat-interface">
-            <div class="chat-messages" id="messages"></div>
-            <div class="message-input">
-                <input type="text" id="messageInput" placeholder="Type your message...">
-                <button id="sendButton" onclick="streamMessage()">Send</button>
+            <div id="characterInfo"></div>
+            <div id="characterCreation" style="padding: 1rem; border-bottom: 1px solid #ddd;">
+                <h3>Create Character</h3>
+                <input type="text" id="characterName" placeholder="Character name" style="width: 100%; margin-bottom: 0.5rem;">
+                <textarea id="systemPrompt" placeholder="System prompt" style="width: 100%; margin-bottom: 0.5rem;"></textarea>
+                <textarea id="greeting" placeholder="Greeting message" style="width: 100%; margin-bottom: 0.5rem;"></textarea>
+                <input type="text" id="tagline" placeholder="Tagline" style="width: 100%; margin-bottom: 0.5rem;">
+                <input type="text" id="photoUrl" placeholder="Photo URL" style="width: 100%; margin-bottom: 0.5rem;">
+                <button onclick="createCharacter()" style="width: 100%;">Create Character</button>
+            </div>
+            <div id="conversationList">
+                <div id="newConversationArea" style="padding: 1rem; border-bottom: 1px solid #ddd;">
+                    <button onclick="startConversation()" style="width: 100%;">Start New Conversation</button>
+                </div>
+                <div id="conversationItems" style="padding: 1rem;"></div>
             </div>
         </div>
-        <div class="debug-info" id="debugInfo"></div>
+
+        <div id="mainContent">
+            <div id="messages"></div>
+            <div id="inputArea">
+                <input type="text" id="messageInput" placeholder="Type your message..." />
+                <button onclick="streamMessage()">Send</button>
+            </div>
+        </div>
     </div>
 
     <script>
+        let currentUser = null;
+        let sessionToken = localStorage.getItem('sessionToken');
+        let currentConversationId = null;
+
         // API base URL - change this to your Heroku app URL when deploying
         const API_BASE_URL = window.location.origin + '/api';
 
-        // Test World ID credentials
+        // Test credentials for development
         const TEST_CREDENTIALS = {
             nullifier_hash: "test_nullifier_123",
             merkle_root: "test_merkle_root",
@@ -152,30 +242,88 @@
             verification_level: "test"
         };
 
-        async function fetchWithAuth(endpoint, options = {}) {
-            // Add default options
-            options = {
-                ...options,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-WorldID-Credentials': JSON.stringify(TEST_CREDENTIALS),
-                    ...options.headers
+        // Function to login with test credentials
+        async function loginWithTestCredentials() {
+            try {
+                console.log("Attempting test login...");
+                const response = await fetch(`${API_BASE_URL}/users/verify`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        nullifier_hash: TEST_CREDENTIALS.nullifier_hash,
+                        merkle_root: TEST_CREDENTIALS.merkle_root,
+                        proof: TEST_CREDENTIALS.proof,
+                        verification_level: TEST_CREDENTIALS.verification_level,
+                        action: "register",
+                        language: "en"
+                    })
+                });
+
+                const result = await response.json();
+                console.log("Login result:", result);
+                
+                if (response.ok) {
+                    console.log("Login successful");
+                    // Store the session token
+                    if (result.session_token) {
+                        sessionToken = result.session_token;
+                        localStorage.setItem('sessionToken', sessionToken);
+                        console.log("Stored session token");
+                    }
+                    
+                    // Store user info
+                    currentUser = result.user;
+                    console.log("Stored user info:", currentUser);
+                    
+                    // Update UI
+                    document.getElementById('loginSection').classList.add('hidden');
+                    document.getElementById('app').style.display = 'flex';
+                    console.log("Updated UI");
+                    
+                    // Load initial data
+                    console.log("Loading initial data...");
+                    await Promise.all([
+                        loadCharacters(),
+                        loadConversations(),
+                        loadUserStats()
+                    ]);
+                    console.log("Initial data loaded");
                 }
-            };
-            
-            const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+            } catch (error) {
+                console.error('Error during test login:', error);
+            }
+        }
+
+        async function fetchWithAuth(url, options = {}) {
+            if (!options.headers) {
+                options.headers = {};
             }
             
-            const data = await response.json();
-            return data;
+            // Add content type
+            options.headers['Content-Type'] = 'application/json';
+            
+            // Add session token if available
+            if (sessionToken) {
+                options.headers['Authorization'] = `Bearer ${sessionToken}`;
+            }
+            // Fallback to World ID credentials if no session token
+            else if (currentUser?.credentials) {
+                options.headers['X-WorldID-Credentials'] = JSON.stringify(currentUser.credentials);
+            }
+            // Use test credentials if nothing else available
+            else {
+                options.headers['X-WorldID-Credentials'] = JSON.stringify(TEST_CREDENTIALS);
+            }
+            
+            return fetch(`${API_BASE_URL}${url}`, options);
         }
 
         async function loadCharacters() {
             try {
-                const characters = await fetchWithAuth('/characters/list/popular');
+                const response = await fetchWithAuth('/characters/list/popular');
+                const characters = await response.json();
                 const select = document.getElementById('characterSelect');
                 select.innerHTML = '<option value="">Select a character...</option>';
                 
@@ -192,13 +340,20 @@
 
         async function loadConversations() {
             try {
-                const conversations = await fetchWithAuth('/conversations/');
+                const response = await fetchWithAuth('/conversations/');
+                const conversations = await response.json();
                 console.log('Loaded conversations:', conversations);
                 
-                const list = document.getElementById('conversationList');
-                list.innerHTML = '<h3>Your Conversations</h3>';
+                // Only show conversations for the currently selected character
+                const characterId = document.getElementById('characterSelect').value;
+                const characterConversations = characterId 
+                    ? conversations.filter(conv => conv.character_id === parseInt(characterId))
+                    : [];
                 
-                conversations.forEach(conv => {
+                const list = document.getElementById('conversationItems');
+                list.innerHTML = characterConversations.length ? '' : '<p style="text-align: center; color: #666;">No conversations yet</p>';
+                
+                characterConversations.forEach(conv => {
                     const div = document.createElement('div');
                     div.className = 'conversation-item';
                     if (conv.id === currentConversationId) {
@@ -208,78 +363,127 @@
                     div.onclick = () => loadConversation(conv.id);
                     list.appendChild(div);
                 });
+
+                // Show/hide new conversation button based on character selection
+                document.getElementById('newConversationArea').style.display = characterId ? 'block' : 'none';
             } catch (error) {
                 console.error('Failed to load conversations:', error);
             }
         }
 
         async function createCharacter() {
-            const character = {
-                name: document.getElementById('characterName').value,
-                system_prompt: document.getElementById('systemPrompt').value,
-                greeting: document.getElementById('greeting').value,
-                tagline: document.getElementById('tagline').value,
-                photo_url: document.getElementById('photoUrl').value,
-                attributes: []
-            };
+            const name = document.getElementById('characterName').value;
+            const systemPrompt = document.getElementById('systemPrompt').value;
+            const greeting = document.getElementById('greeting').value;
+            const tagline = document.getElementById('tagline').value;
+            const photoUrl = document.getElementById('photoUrl').value;
+
+            if (!name || !systemPrompt || !greeting) {
+                alert('Please fill in all required fields (name, system prompt, and greeting)');
+                return;
+            }
 
             try {
-                await fetchWithAuth('/characters/', {
+                const response = await fetchWithAuth('/characters/', {
                     method: 'POST',
-                    body: JSON.stringify(character)
+                    body: JSON.stringify({
+                        name,
+                        system_prompt: systemPrompt,
+                        greeting,
+                        tagline,
+                        photo_url: photoUrl
+                    })
                 });
-                
-                loadCharacters();
-                
-                // Clear form
-                ['characterName', 'systemPrompt', 'greeting', 'tagline', 'photoUrl'].forEach(id => {
-                    document.getElementById(id).value = '';
-                });
+
+                if (response.ok) {
+                    // Clear form
+                    document.getElementById('characterName').value = '';
+                    document.getElementById('systemPrompt').value = '';
+                    document.getElementById('greeting').value = '';
+                    document.getElementById('tagline').value = '';
+                    document.getElementById('photoUrl').value = '';
+
+                    // Reload characters
+                    await loadCharacters();
+                    alert('Character created successfully!');
+                } else {
+                    alert('Failed to create character');
+                }
             } catch (error) {
                 console.error('Failed to create character:', error);
+                alert('Failed to create character');
             }
         }
-
-        let currentConversationId = null;
 
         async function loadCharacter() {
             const characterId = document.getElementById('characterSelect').value;
             if (!characterId) return;
             
             try {
-                const character = await fetchWithAuth(`/characters/detail/${characterId}`);
+                // Load character details
+                const response = await fetchWithAuth(`/characters/detail/${characterId}`);
+                const character = await response.json();
                 const characterInfo = document.getElementById('characterInfo');
                 characterInfo.innerHTML = `
                     <h2>${character.name}</h2>
                     <p>${character.tagline || ''}</p>
                     ${character.photo_url ? `<img src="${character.photo_url}" alt="${character.name}">` : ''}
                 `;
+
+                // Load conversations for this character
+                const convResponse = await fetchWithAuth('/conversations/');
+                const conversations = await convResponse.json();
+                const characterConversations = conversations.filter(conv => conv.character_id === parseInt(characterId));
+                
+                const list = document.getElementById('conversationItems');
+                list.innerHTML = characterConversations.length ? '' : '<p style="text-align: center; color: #666;">No conversations yet</p>';
+                
+                characterConversations.forEach(conv => {
+                    const div = document.createElement('div');
+                    div.className = 'conversation-item';
+                    if (conv.id === currentConversationId) {
+                        div.classList.add('active');
+                    }
+                    div.textContent = `Conversation ${conv.id}`;
+                    div.onclick = () => loadConversation(conv.id);
+                    list.appendChild(div);
+                });
+
+                // Show/hide new conversation button based on character selection
+                document.getElementById('newConversationArea').style.display = characterId ? 'block' : 'none';
             } catch (error) {
                 console.error('Failed to load character:', error);
             }
         }
 
         async function loadConversation(conversationId) {
-            console.log('Loading conversation:', conversationId);
-            currentConversationId = conversationId;
-            
             try {
-                const messages = await fetchWithAuth(`/conversations/${conversationId}/messages`);
-                console.log('Loaded messages:', messages);
+                console.log('Loading conversation:', conversationId);
+                currentConversationId = conversationId;
+                const response = await fetchWithAuth(`/conversations/${conversationId}/messages`);
+                console.log('Loaded messages:', response);
+                const messages = await response.json();
+                console.log('Parsed messages:', messages);
                 
+                // Update UI
                 const messagesDiv = document.getElementById('messages');
                 messagesDiv.innerHTML = '';
                 
-                messages.forEach(msg => {
-                    const messageDiv = document.createElement('div');
-                    messageDiv.className = `message ${msg.role}-message`;
-                    messageDiv.textContent = msg.content;
-                    messagesDiv.appendChild(messageDiv);
-                });
+                if (Array.isArray(messages)) {
+                    messages.forEach(msg => {
+                        const messageDiv = document.createElement('div');
+                        messageDiv.className = `message ${msg.role}-message`;
+                        messageDiv.textContent = msg.content;
+                        messagesDiv.appendChild(messageDiv);
+                    });
+                } else {
+                    console.error('Messages is not an array:', messages);
+                }
                 
+                // Scroll to bottom
                 messagesDiv.scrollTop = messagesDiv.scrollHeight;
                 
-                // Update active conversation styling
+                // Update active conversation
                 document.querySelectorAll('.conversation-item').forEach(item => {
                     item.classList.remove('active');
                     if (item.textContent === `Conversation ${conversationId}`) {
@@ -294,26 +498,24 @@
         async function startConversation() {
             const characterId = document.getElementById('characterSelect').value;
             if (!characterId) {
-                alert('Please select a character first');
+                console.warn('No character selected');
                 return;
             }
-            
+
             try {
                 const response = await fetchWithAuth('/conversations/', {
                     method: 'POST',
                     body: JSON.stringify({
                         character_id: parseInt(characterId),
-                        language: 'en'
+                        language: 'EN'
                     })
                 });
-                
-                // Get conversation ID from response
-                const conversationId = response;
-                console.log('Started conversation with ID:', conversationId);
-                
-                // Load the new conversation
-                await loadConversation(conversationId);
-                loadConversations();
+
+                if (response.ok) {
+                    const conversationId = await response.json();
+                    await loadCharacter(); // Refresh conversations
+                    loadConversation(conversationId); // Load the new conversation
+                }
             } catch (error) {
                 console.error('Failed to start conversation:', error);
             }
@@ -343,68 +545,183 @@
         async function streamMessage() {
             const messageInput = document.getElementById('messageInput');
             const content = messageInput.value.trim();
-            if (!content || !currentConversationId) return;
             
-            messageInput.value = '';
-            
-            // Add user message immediately
-            const messagesDiv = document.getElementById('messages');
-            const userMessageDiv = document.createElement('div');
-            userMessageDiv.className = 'message user-message';
-            userMessageDiv.textContent = content;
-            messagesDiv.appendChild(userMessageDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            
-            // Create AI message div that will be updated with streamed tokens
-            const aiMessageDiv = document.createElement('div');
-            aiMessageDiv.className = 'message assistant-message';
-            messagesDiv.appendChild(aiMessageDiv);
-            
+            if (!content || !currentConversationId) {
+                console.warn('Cannot send message: content or conversationId missing', { content, currentConversationId });
+                return;
+            }
+
             try {
-                // First get a temporary stream token
-                const tokenResponse = await fetchWithAuth(`/conversations/${currentConversationId}/stream/token`, {
-                    method: 'POST',
-                    body: JSON.stringify({ content })
+                // Create message element for user's message
+                const messagesDiv = document.getElementById('messages');
+                const userMessageDiv = document.createElement('div');
+                userMessageDiv.className = 'message user-message';
+                userMessageDiv.textContent = content;
+                messagesDiv.appendChild(userMessageDiv);
+                
+                // Clear input
+                messageInput.value = '';
+                
+                // Create message element for assistant's response
+                const assistantMessageDiv = document.createElement('div');
+                assistantMessageDiv.className = 'message assistant-message';
+                messagesDiv.appendChild(assistantMessageDiv);
+                
+                // Start streaming
+                const params = new URLSearchParams({
+                    content: content,
+                    session_token: sessionToken // Pass token in query param since headers aren't supported in EventSource
                 });
-                
-                // Then use the token to establish SSE connection
-                const parser = new EventSource(`${API_BASE_URL}/conversations/${currentConversationId}/stream?token=${tokenResponse.token}`);
-                
-                parser.addEventListener('token', (event) => {
-                    aiMessageDiv.textContent += event.data;
+
+                const eventSource = new EventSource(
+                    `${API_BASE_URL}/conversations/${currentConversationId}/stream?${params.toString()}`
+                );
+
+                eventSource.addEventListener('token', (event) => {
+                    assistantMessageDiv.textContent += event.data;
                     messagesDiv.scrollTop = messagesDiv.scrollHeight;
                 });
-                
-                parser.addEventListener('error', (event) => {
-                    console.error('Stream error:', event.data);
-                    if (event.data) {  
-                        aiMessageDiv.textContent += '\n[Error: Message streaming failed]';
-                    }
-                    parser.close();
+
+                eventSource.addEventListener('done', () => {
+                    eventSource.close();
+                    loadConversations(); // Refresh conversation list
                 });
-                
-                // Close parser when the stream ends
-                parser.addEventListener('done', () => {
-                    parser.close();
+
+                eventSource.addEventListener('error', (event) => {
+                    console.error('Error streaming message:', event);
+                    eventSource.close();
+                    assistantMessageDiv.textContent += '\n[Error: Message streaming failed]';
                 });
-                
+
+                // Scroll to bottom
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
             } catch (error) {
-                console.error('Error:', error);
-                aiMessageDiv.textContent = '[Error: Failed to send message]';
+                console.error('Failed to stream message:', error);
             }
         }
 
-        // Update send button and Enter key handler to use streaming
-        document.getElementById('sendButton').onclick = streamMessage;
-        document.getElementById('messageInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                streamMessage();
-            }
-        });
+        async function onSuccessfulVerification(proof) {
+            try {
+                const response = await fetch('/users/verify', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        nullifier_hash: proof.nullifier_hash,
+                        merkle_root: proof.merkle_root,
+                        proof: proof.proof,
+                        verification_level: proof.verification_level,
+                        action: "register",
+                        language: "en"
+                    })
+                });
 
-        // Load initial data
-        loadCharacters();
-        loadConversations();
+                const result = await response.json();
+                
+                if (response.ok) {
+                    // Store the session token
+                    if (result.session_token) {
+                        sessionToken = result.session_token;
+                        localStorage.setItem('sessionToken', sessionToken);
+                    }
+                    
+                    // Store user info and credentials as fallback
+                    currentUser = {
+                        id: result.user.id,
+                        credentials: {
+                            nullifier_hash: proof.nullifier_hash,
+                            merkle_root: proof.merkle_root,
+                            proof: proof.proof,
+                            verification_level: proof.verification_level
+                        }
+                    };
+                    
+                    // Update UI
+                    document.getElementById('loginSection').classList.add('hidden');
+                    document.getElementById('app').style.display = 'flex';
+                    
+                    // Load initial data
+                    await Promise.all([
+                        loadCharacters(),
+                        loadConversations(),
+                        loadUserStats()
+                    ]);
+                }
+            } catch (error) {
+                console.error('Error during verification:', error);
+                alert('Error during verification. Please try again.');
+            }
+        }
+
+        async function checkAuthStatus() {
+            try {
+                const response = await fetchWithAuth('/users/me');
+                if (response.ok) {
+                    const user = await response.json();
+                    currentUser = user;
+                    document.getElementById('loginSection').classList.add('hidden');
+                    document.getElementById('app').style.display = 'flex';
+                    await loadCharacters();
+                    await loadUserStats();
+                } else {
+                    // Clear invalid session
+                    sessionToken = null;
+                    localStorage.removeItem('sessionToken');
+                    document.getElementById('loginSection').classList.remove('hidden');
+                    document.getElementById('app').style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error checking auth status:', error);
+            }
+        }
+
+        async function loadUserStats() {
+            try {
+                const response = await fetchWithAuth('/users/stats');
+                const stats = await response.json();
+                document.getElementById('userStats').textContent = `Credits: ${stats.credits}`;
+            } catch (error) {
+                console.error('Failed to load user stats:', error);
+            }
+        }
+
+        // Auto-login with test credentials in development
+        window.onload = async function() {
+            console.log("Page loaded, checking auth...");
+            // First try to restore session from localStorage
+            sessionToken = localStorage.getItem('sessionToken');
+            
+            if (sessionToken) {
+                console.log("Found existing session token");
+                try {
+                    const response = await fetchWithAuth('/users/me');
+                    const user = await response.json();
+                    console.log("Got user info:", user);
+                    
+                    // Update UI
+                    document.getElementById('loginSection').classList.add('hidden');
+                    document.getElementById('app').style.display = 'flex';
+                    
+                    // Load initial data
+                    console.log("Loading initial data...");
+                    await Promise.all([
+                        loadCharacters(),
+                        loadConversations(),
+                        loadUserStats()
+                    ]);
+                    console.log("Initial data loaded");
+                } catch (error) {
+                    console.error('Session expired or invalid:', error);
+                    sessionToken = null;
+                    localStorage.removeItem('sessionToken');
+                    await loginWithTestCredentials();
+                }
+            } else {
+                console.log("No session token, doing test login");
+                await loginWithTestCredentials();
+            }
+        };
     </script>
 </body>
 </html>
