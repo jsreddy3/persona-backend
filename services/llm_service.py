@@ -89,6 +89,58 @@ class LLMService:
             logger.error(f"Error in LLM service: {str(e)}")
             raise RuntimeError(f"Failed to process message: {str(e)}")
             
+    async def stream_message(
+        self,
+        system_message: str,
+        conversation_history: List[Message],
+        new_message: str,
+    ):
+        """
+        Stream a message response token by token
+        Args:
+            system_message: The character's system prompt
+            conversation_history: List of previous messages
+            new_message: The user's new message
+        Yields:
+            Tokens from the AI's response
+        """
+        try:
+            messages = [
+                {"role": "system", "content": system_message}
+            ]
+            
+            # Add conversation history
+            for msg in conversation_history:
+                messages.append({
+                    "role": msg.role,
+                    "content": msg.content
+                })
+            
+            # Add new message
+            messages.append({
+                "role": "user",
+                "content": new_message
+            })
+            
+            logger.info(f"Starting streaming request to LLM with {len(messages)} messages")
+            
+            # Call LLM with streaming
+            response = await acompletion(
+                model=self.config.model,
+                messages=messages,
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_tokens,
+                stream=True
+            )
+            
+            async for chunk in response:
+                if chunk and chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+                    
+        except Exception as e:
+            logger.error(f"Error in LLM streaming service: {str(e)}")
+            raise RuntimeError(f"Failed to stream message: {str(e)}")
+
     def update_config(self, new_config: LLMConfig):
         """Update the LLM configuration"""
         self.config = new_config

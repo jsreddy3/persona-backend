@@ -134,7 +134,7 @@
             <div class="chat-messages" id="messages"></div>
             <div class="message-input">
                 <input type="text" id="messageInput" placeholder="Type your message...">
-                <button id="send-button" onclick="sendMessage()">Send</button>
+                <button id="sendButton" onclick="streamMessage()">Send</button>
             </div>
         </div>
         <div class="debug-info" id="debugInfo"></div>
@@ -340,41 +340,69 @@
             }
         }
 
-        async function sendMessage() {
+        async function streamMessage() {
             const messageInput = document.getElementById('messageInput');
             const content = messageInput.value.trim();
+            if (!content || !currentConversationId) return;
             
-            console.log('Sending message:', { content, currentConversationId });
+            messageInput.value = '';
             
-            if (!content || !currentConversationId) {
-                console.warn('Cannot send message: content or conversationId missing', { content, currentConversationId });
-                return;
-            }
-
+            // Add user message immediately
+            const messagesDiv = document.getElementById('messages');
+            const userMessageDiv = document.createElement('div');
+            userMessageDiv.className = 'message user-message';
+            userMessageDiv.textContent = content;
+            messagesDiv.appendChild(userMessageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            
+            // Create AI message div that will be updated with streamed tokens
+            const aiMessageDiv = document.createElement('div');
+            aiMessageDiv.className = 'message assistant-message';
+            messagesDiv.appendChild(aiMessageDiv);
+            
             try {
-                console.log('Making API request to send message...');
-                const messages = await fetchWithAuth(`/conversations/${currentConversationId}/messages`, {
+                const response = await fetch(`/conversations/${currentConversationId}/stream`, {
                     method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
                     body: JSON.stringify({ content })
                 });
-                console.log('Message sent successfully:', messages);
                 
-                messageInput.value = '';
-                loadMessages();
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                const parser = new EventSource(`/conversations/${currentConversationId}/stream`);
+                
+                parser.addEventListener('token', (event) => {
+                    aiMessageDiv.textContent += event.data;
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                });
+                
+                parser.addEventListener('error', (event) => {
+                    console.error('Stream error:', event.data);
+                    aiMessageDiv.textContent += '\n[Error: Message streaming failed]';
+                    parser.close();
+                });
+                
+                // Close parser when the stream ends
+                parser.addEventListener('done', () => {
+                    parser.close();
+                });
+                
             } catch (error) {
-                console.error('Failed to send message:', error);
+                console.error('Error:', error);
+                aiMessageDiv.textContent = '[Error: Failed to send message]';
             }
         }
 
-        // Allow sending message with Enter key
+        // Update send button and Enter key handler to use streaming
+        document.getElementById('sendButton').onclick = streamMessage;
         document.getElementById('messageInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
-                sendMessage();
+                streamMessage();
             }
         });
-
-        // Add click handler for send button
-        document.getElementById('send-button').addEventListener('click', sendMessage);
 
         // Load initial data
         loadCharacters();

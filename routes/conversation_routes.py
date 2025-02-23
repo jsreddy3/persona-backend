@@ -7,6 +7,7 @@ from database.models import User
 from services.conversation_service import ConversationService
 from dependencies.auth import get_current_user
 import logging
+from sse_starlette.sse import EventSourceResponse
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -114,4 +115,40 @@ async def create_conversation(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Error creating conversation: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{conversation_id}/stream", response_class=EventSourceResponse)
+async def stream_message(
+    conversation_id: int,
+    message: MessageCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Stream a message in a conversation and get the AI's response token by token
+    Returns a stream of SSE events containing tokens
+    """
+    try:
+        service = ConversationService(db)
+        
+        async def event_generator():
+            try:
+                async for token in service.stream_user_message(
+                    user_id=current_user.id,
+                    conversation_id=conversation_id,
+                    message_content=message.content
+                ):
+                    yield {
+                        "event": "token",
+                        "data": token
+                    }
+            except ValueError as e:
+                yield {
+                    "event": "error",
+                    "data": str(e)
+                }
+                
+        return EventSourceResponse(event_generator())
+        
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -45,3 +45,14 @@ class ConversationRepository(BaseRepository[Conversation]):
             .filter(Conversation.creator_id == user_id)\
             .order_by(Conversation.created_at.desc())\
             .all()
+
+    def update_message(self, message_id: int, content: str) -> Optional[Message]:
+        """Update a message's content"""
+        message = self.db.query(Message).filter(Message.id == message_id).first()
+        if not message:
+            return None
+            
+        message.content = content
+        self.db.commit()
+        self.db.refresh(message)
+        return message
