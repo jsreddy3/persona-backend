@@ -23,7 +23,7 @@ class ImageGenerationService:
         Generate an image using getimg.ai's SDXL API
         
         Args:
-            prompt: Text description of the image to generate
+            prompt: Text description of the image to generate (will be truncated to 800 chars)
             width: Image width (default 1024)
             height: Image height (default 1024)
             steps: Number of inference steps (default 20)
@@ -40,8 +40,13 @@ class ImageGenerationService:
                 "Content-Type": "application/json"
             }
             
+            # Truncate prompt to 800 characters
+            truncated_prompt = prompt[:800]
+            if len(prompt) > 800:
+                logger.info(f"Truncated prompt from {len(prompt)} to 800 characters")
+            
             data = {
-                "prompt": prompt,
+                "prompt": truncated_prompt,
                 "width": width,
                 "height": height,
                 "steps": steps
