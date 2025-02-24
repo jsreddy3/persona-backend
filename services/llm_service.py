@@ -12,7 +12,7 @@ class LLMConfig(BaseModel):
     model: str = "gpt-4o-mini"
     temperature: float = 0.7
     max_tokens: int = 150
-    window_size: int = 4  # Number of message pairs (user + assistant) to keep
+    window_size: int = 12  # Number of message pairs (user + assistant) to keep
 
 class LLMResponse(BaseModel):
     content: str
