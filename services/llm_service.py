@@ -12,6 +12,7 @@ class LLMConfig(BaseModel):
     model: str = "gpt-4o-mini"
     temperature: float = 0.7
     max_tokens: int = 150
+    window_size: int = 4  # Number of message pairs (user + assistant) to keep
 
 class LLMResponse(BaseModel):
     content: str
@@ -29,6 +30,44 @@ class LLMService:
             logger.error("OPENAI_API_KEY not found in environment variables")
             raise ValueError("OPENAI_API_KEY not set")
 
+    def _get_windowed_messages(
+        self,
+        system_message: str,
+        conversation_history: List[Message],
+        new_message: str
+    ) -> List[Dict[str, str]]:
+        """
+        Get windowed conversation messages, keeping system prompt and last N pairs
+        """
+        messages = [{"role": "system", "content": system_message}]
+        
+        # Calculate how many message pairs to keep
+        window_size = self.config.window_size * 2  # Multiply by 2 for user + assistant pairs
+        
+        # If we have more messages than our window, slice the history
+        if len(conversation_history) > window_size:
+            conversation_history = conversation_history[-window_size:]
+        
+        # Add conversation history
+        for msg in conversation_history:
+            messages.append({
+                "role": msg.role,
+                "content": msg.content
+            })
+        
+        # Add new message
+        messages.append({
+            "role": "user",
+            "content": new_message
+        })
+        
+        # Log windowed messages
+        logger.info(f"Using {len(messages)-1} messages from history (window_size={self.config.window_size} pairs)")
+        for i, msg in enumerate(messages):
+            logger.info(f"Message {i}: role={msg['role']}, content={msg['content'][:50]}...")
+            
+        return messages
+
     async def process_message(
         self,
         system_message: str,
@@ -45,28 +84,8 @@ class LLMService:
             The AI's response
         """
         try:
-            # Build messages array for LLM
-            messages = [
-                {"role": "system", "content": system_message}
-            ]
-            
-            # Add conversation history
-            for msg in conversation_history:
-                messages.append({
-                    "role": msg.role,
-                    "content": msg.content
-                })
-            
-            # Add new message
-            messages.append({
-                "role": "user",
-                "content": new_message
-            })
-            
-            # Log messages being sent
-            logger.info(f"Total messages being sent to LLM: {len(messages)}")
-            for i, msg in enumerate(messages):
-                logger.info(f"Message {i}: role={msg['role']}, content={msg['content'][:50]}...")
+            # Get windowed messages
+            messages = self._get_windowed_messages(system_message, conversation_history, new_message)
             
             logger.info(f"Sending request to LLM with {len(messages)} messages")
             
@@ -105,22 +124,8 @@ class LLMService:
             Tokens from the AI's response
         """
         try:
-            messages = [
-                {"role": "system", "content": system_message}
-            ]
-            
-            # Add conversation history
-            for msg in conversation_history:
-                messages.append({
-                    "role": msg.role,
-                    "content": msg.content
-                })
-            
-            # Add new message
-            messages.append({
-                "role": "user",
-                "content": new_message
-            })
+            # Get windowed messages
+            messages = self._get_windowed_messages(system_message, conversation_history, new_message)
             
             logger.info(f"Starting streaming request to LLM with {len(messages)} messages")
             
