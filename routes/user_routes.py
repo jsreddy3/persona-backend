@@ -29,6 +29,7 @@ class VerifyRequest(BaseModel):
 
 class UserResponse(BaseModel):
     world_id: str
+    username: str
     language: str
     credits: int
 
@@ -169,6 +170,7 @@ async def get_current_user_info(
         
     return UserResponse(
         world_id=current_user.world_id,
+        username=current_user.username or "Anonymous User",
         language=current_user.language,
         credits=current_user.credits
     )
