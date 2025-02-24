@@ -40,9 +40,20 @@ class CharacterResponse(BaseModel):
     num_messages: int = 0
     rating: float = 0.0
     attributes: List[str] = []
+    created_at: str
+    updated_at: str
     
     class Config:
-        orm_mode = True  
+        orm_mode = True
+
+    @classmethod
+    def from_orm(cls, obj):
+        # Convert datetime to string in ISO format
+        if isinstance(obj.created_at, datetime.datetime):
+            obj.created_at = obj.created_at.isoformat()
+        if isinstance(obj.updated_at, datetime.datetime):
+            obj.updated_at = obj.updated_at.isoformat()
+        return super().from_orm(obj)
 
 class GenerateImageRequest(BaseModel):
     prompt: str

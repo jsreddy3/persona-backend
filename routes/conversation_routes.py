@@ -9,6 +9,7 @@ from dependencies.auth import get_current_user
 from .character_routes import CharacterResponse
 import logging
 import time
+from datetime import datetime
 from sse_starlette.sse import EventSourceResponse
 
 # Set up logging
@@ -40,6 +41,13 @@ class ConversationResponse(BaseModel):
 
     class Config:
         orm_mode = True
+
+    @classmethod
+    def from_orm(cls, obj):
+        # Convert datetime to string in ISO format
+        if isinstance(obj.created_at, datetime):
+            obj.created_at = obj.created_at.isoformat()
+        return super().from_orm(obj)
 
 @router.post("/{conversation_id}/stream/token")
 async def get_stream_token(
