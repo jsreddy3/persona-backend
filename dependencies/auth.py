@@ -65,6 +65,11 @@ async def get_current_user(
     2. Session token in cookie or query param
     3. World ID credentials in X-WorldID-Credentials header
     """
+    logger.info("Auth headers: %s", dict(request.headers))
+    logger.info("Session token from cookie: %s", session_token and session_token[:8])
+    logger.info("Session token from query: %s", session_token_query and session_token_query[:8])
+    logger.info("Bearer token: %s", credentials and credentials.credentials[:8])
+    
     # First try session token
     token = session_token or session_token_query
     if token:

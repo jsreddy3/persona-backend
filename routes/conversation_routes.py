@@ -93,9 +93,10 @@ async def get_conversations(
 ):
     """Get all conversations for the current user"""
     try:
+        logger.info(f"Getting conversations for user {current_user.id} (email: {current_user.email})")
         service = ConversationService(db)
         conversations = service.repository.get_by_user_id(current_user.id)
-        logger.info(f"Getting all conversations for user {current_user.id}. Gotten this many: {len(conversations)}")
+        logger.info(f"Found {len(conversations)} conversations")
         return [
             {
                 "id": conv.id,
@@ -106,6 +107,7 @@ async def get_conversations(
         ]
     except Exception as e:
         logger.error(f"Error getting conversations: {str(e)}")
+        logger.exception("Full traceback:")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/", response_model=int)
