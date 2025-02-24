@@ -158,7 +158,7 @@ async def get_character_stats(
     """Get character stats"""
     try:
         service = CharacterService(db)
-        stats = service.get_character_stats(character_id)
+        stats = service.get_stats(character_id)
         return stats
     except Exception as e:
         logger.error(f"Error getting character stats: {e}")
@@ -235,4 +235,39 @@ async def generate_character_image(
         
     except Exception as e:
         logger.error(f"Error generating character image: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/creator/{world_id}")
+async def get_creator_characters(
+    world_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get all characters created by a user with their stats"""
+    try:
+        # First get the user by world_id
+        user = db.query(User).filter(User.world_id == world_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+            
+        service = CharacterService(db)
+        characters = service.get_creator_characters(user.id)
+        
+        # Get stats for each character
+        characters_with_stats = []
+        for character in characters:
+            stats = service.get_stats(character.id)
+            characters_with_stats.append({
+                **stats,
+                "character_description": character.character_description,
+                "greeting": character.greeting,
+                "tagline": character.tagline,
+                "photo_url": character.photo_url,
+                "attributes": character.attributes,
+                "created_at": character.created_at,
+                "updated_at": character.updated_at
+            })
+            
+        return characters_with_stats
+    except Exception as e:
+        logger.error(f"Error getting creator's characters: {e}")
         raise HTTPException(status_code=500, detail=str(e))
