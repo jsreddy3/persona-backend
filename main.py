@@ -70,3 +70,6 @@ for route in app.routes:
 
 # Initialize database
 init_db()
+
+# Log initialization
+logger.info("PersonaAI API initialized successfully")
