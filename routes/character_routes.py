@@ -75,6 +75,7 @@ async def create_character(
         service = CharacterService(db)
         # Get language from request header
         language = request.headers.get("accept-language", "en").split(",")[0].split("-")[0].lower()
+        logger.info(f"Creating character with language: {language}")
         
         new_character = service.create_character(
             name=character.name,
@@ -151,6 +152,7 @@ async def get_popular_characters(
         service = CharacterService(db)
         # Get language from request header
         language = request.headers.get("accept-language", "en").split(",")[0].split("-")[0].lower()
+        logger.info(f"Getting popular characters for language: {language}")
         return service.get_popular_characters(language=language)
     except Exception as e:
         logger.error(f"Error getting popular characters: {str(e)}")
