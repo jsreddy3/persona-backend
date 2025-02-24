@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -37,6 +37,15 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+# Language middleware
+@app.middleware("http")
+async def get_accept_language(request: Request, call_next):
+    language = request.headers.get("accept-language", "en").split(",")[0].lower()
+    # Store language in request state
+    request.state.language = language
+    response = await call_next(request)
+    return response
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")

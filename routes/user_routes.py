@@ -126,6 +126,7 @@ def purchase_credits(
 @router.post("/verify", response_model=dict)
 async def verify_world_id(
     request: VerifyRequest,
+    req: Request,
     db: Session = Depends(get_db)
 ):
     """Verify a World ID proof and create/update user"""
@@ -134,13 +135,17 @@ async def verify_world_id(
         user_repo = UserRepository(db)
         world_id_service = WorldIDService(user_repo)
         
+        # Get language from Accept-Language header
+        language = req.headers.get("accept-language", "en").split(",")[0].lower()
+        logger.info(f"Using language from header: {language}")
+        
         result = await world_id_service.verify_proof(
             nullifier_hash=request.nullifier_hash,
             merkle_root=request.merkle_root,
             proof=request.proof,
             verification_level=request.verification_level,
             action=request.action,
-            language=request.language
+            language=language  # Use header language instead of request field
         )
         
         # Create session token after successful verification
