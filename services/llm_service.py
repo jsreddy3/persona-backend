@@ -9,7 +9,7 @@ from database.models import Message
 logger = logging.getLogger(__name__)
 
 class LLMConfig(BaseModel):
-    model: str = "accounts/fireworks/models/deepseek-v3"
+    model: str = "gpt-4o-mini"
     temperature: float = 0.7
     max_tokens: int = 150
     window_size: int = 12  # Number of message pairs (user + assistant) to keep
@@ -29,9 +29,6 @@ class LLMService:
         if not os.getenv("OPENAI_API_KEY"):
             logger.error("OPENAI_API_KEY not found in environment variables")
             raise ValueError("OPENAI_API_KEY not set")
-        if not os.getenv("FIREWORKS_API_KEY"):
-            logger.error("FIREWORKS_API_KEY not found in environment variables")
-            raise ValueError("FIREWORKS_API_KEY not set")
 
     def _get_windowed_messages(
         self,
@@ -92,14 +89,12 @@ class LLMService:
             
             logger.info(f"Sending request to LLM with {len(messages)} messages")
             
-            # Call LLM with Fireworks parameters
+            # Call LLM with minimal parameters
             response = await acompletion(
                 model=self.config.model,
                 messages=messages,
                 temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                api_key=os.getenv("FIREWORKS_API_KEY"),
-                api_base="https://api.fireworks.ai/inference/v1"
+                max_tokens=self.config.max_tokens
             )
             
             # Extract and return response
@@ -134,14 +129,12 @@ class LLMService:
             
             logger.info(f"Starting streaming request to LLM with {len(messages)} messages")
             
-            # Call LLM with streaming and Fireworks parameters
+            # Call LLM with streaming
             response = await acompletion(
                 model=self.config.model,
                 messages=messages,
                 temperature=self.config.temperature,
                 max_tokens=self.config.max_tokens,
-                api_key=os.getenv("FIREWORKS_API_KEY"),
-                api_base="https://api.fireworks.ai/inference/v1",
                 stream=True
             )
             
