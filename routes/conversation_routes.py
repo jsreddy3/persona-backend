@@ -6,6 +6,7 @@ from database.database import get_db
 from database.models import User
 from services.conversation_service import ConversationService
 from dependencies.auth import get_current_user
+from .character_routes import CharacterResponse
 import logging
 import time
 from sse_starlette.sse import EventSourceResponse
@@ -30,6 +31,15 @@ class MessageResponse(BaseModel):
     
     class Config:
         orm_mode = True  # Use orm_mode in v1 instead of from_attributes
+
+class ConversationResponse(BaseModel):
+    id: int
+    character_id: int
+    created_at: str
+    character: CharacterResponse
+
+    class Config:
+        orm_mode = True
 
 @router.post("/{conversation_id}/stream/token")
 async def get_stream_token(
@@ -86,24 +96,16 @@ async def get_conversation_messages(
         logger.error(f"Error getting messages: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/")
+@router.get("/", response_model=List[ConversationResponse])
 async def get_conversations(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get all conversations for the current user"""
+    """Get all conversations for the current user with character details"""
     try:
         service = ConversationService(db)
-        conversations = service.repository.get_by_user_id(current_user.id)
-        logger.info(f"Getting all conversations for user {current_user.id}. Gotten this many: {len(conversations)}")
-        return [
-            {
-                "id": conv.id,
-                "character_id": conv.character_id,
-                "created_at": conv.created_at
-            }
-            for conv in conversations
-        ]
+        conversations = service.get_conversations_with_characters(current_user.id)
+        return conversations
     except Exception as e:
         logger.error(f"Error getting conversations: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

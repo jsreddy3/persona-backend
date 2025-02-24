@@ -192,3 +192,8 @@ class ConversationService:
     
     def get_user_conversations(self, user_id: int) -> List[Conversation]:
         return self.repository.get_by_participant(user_id)
+    
+    def get_conversations_with_characters(self, user_id: int):
+        """Get all conversations for a user with character details included"""
+        conversations = self.repository.get_by_user_id_with_characters(user_id)
+        return conversations

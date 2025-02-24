@@ -1,7 +1,7 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from .base import BaseRepository
-from database.models import Conversation, Message
+from database.models import Conversation, Message, Character
 
 class ConversationRepository(BaseRepository[Conversation]):
     def __init__(self, db: Session):
@@ -44,6 +44,13 @@ class ConversationRepository(BaseRepository[Conversation]):
         return self.db.query(Conversation)\
             .filter(Conversation.creator_id == user_id)\
             .order_by(Conversation.created_at.desc())\
+            .all()
+
+    def get_by_user_id_with_characters(self, user_id: int):
+        """Get all conversations for a user with character details included"""
+        return self.db.query(Conversation)\
+            .options(joinedload(Conversation.character))\
+            .filter(Conversation.creator_id == user_id)\
             .all()
 
     def update_message(self, message_id: int, content: str) -> Optional[Message]:
