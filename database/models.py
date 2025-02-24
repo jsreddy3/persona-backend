@@ -54,6 +54,7 @@ class Character(Base):
     attributes = Column(JSON, default=list)  # Store attributes as JSON array
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    language = Column(String, default="es")
     
     # Relationships
     creator = relationship("User", back_populates="created_characters")

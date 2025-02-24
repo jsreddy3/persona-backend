@@ -15,7 +15,8 @@ class CharacterService:
         creator_id: int,
         tagline: Optional[str] = None,
         photo_url: Optional[str] = None,
-        attributes: List[str] = []
+        attributes: List[str] = [],
+        language: str = "en"
     ) -> Character:
         """Create a new character"""
         character_data = {
@@ -28,23 +29,24 @@ class CharacterService:
             "num_chats_created": 0,
             "num_messages": 0,
             "rating": 0.0,
-            "attributes": attributes
+            "attributes": attributes,
+            "language": language
         }
         
         return self.repository.create(character_data)
     
-    def get_popular_characters(self, page: int = 1, per_page: int = 10) -> List[Character]:
+    def get_popular_characters(self, page: int = 1, per_page: int = 10, language: str = "en") -> List[Character]:
         """Get popular characters ordered by number of messages"""
         skip = (page - 1) * per_page
-        return self.repository.get_by_popularity(skip=skip, limit=per_page)
+        return self.repository.get_by_popularity(skip=skip, limit=per_page, language=language)
     
     def get_character(self, character_id: int) -> Optional[Character]:
         """Get character details by ID"""
         return self.repository.get_by_id(character_id)
     
-    def get_creator_characters(self, creator_id: int) -> List[Character]:
+    def get_creator_characters(self, creator_id: int, language: str = "en") -> List[Character]:
         """Get all characters created by a user"""
-        return self.repository.get_by_creator(creator_id)
+        return self.repository.get_by_creator(creator_id, language=language)
     
     def get_stats(self, character_id: int) -> Optional[dict]:
         """Get character statistics"""
@@ -58,7 +60,7 @@ class CharacterService:
             
         return self.repository.update(character_id, {"photo_url": photo_url})
 
-    def search_characters(self, query: str, page: int = 1, per_page: int = 10) -> List[Character]:
+    def search_characters(self, query: str, page: int = 1, per_page: int = 10, language: str = "en") -> List[Character]:
         """Search characters by name, tagline, or description"""
         skip = (page - 1) * per_page
-        return self.repository.search(query, skip=skip, limit=per_page)
+        return self.repository.search(query, skip=skip, limit=per_page, language=language)

@@ -42,6 +42,7 @@ class CharacterResponse(BaseModel):
     attributes: List[str] = []
     created_at: str
     updated_at: str
+    language: str
     
     class Config:
         orm_mode = True
@@ -64,6 +65,7 @@ class GenerateImageRequest(BaseModel):
 @router.post("/", response_model=CharacterResponse)
 async def create_character(
     character: CharacterCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -71,6 +73,9 @@ async def create_character(
     try:
         # Create character
         service = CharacterService(db)
+        # Get language from request header
+        language = request.headers.get("accept-language", "en").split(",")[0].split("-")[0].lower()
+        
         new_character = service.create_character(
             name=character.name,
             character_description=character.character_description,
@@ -78,7 +83,8 @@ async def create_character(
             tagline=character.tagline,
             photo_url=character.photo_url,
             creator_id=current_user.id,
-            attributes=character.attributes
+            attributes=character.attributes,
+            language=language
         )
         
         # Generate initial image if none provided
@@ -136,12 +142,16 @@ async def create_character(
 
 @router.get("/list/popular", response_model=List[CharacterResponse])
 async def get_popular_characters(
+    request: Request,
+    language: str = '',
     db: Session = Depends(get_db)
 ):
     """Get list of popular characters"""
     try:
         service = CharacterService(db)
-        return service.get_popular_characters()
+        # Get language from request header
+        language = request.headers.get("accept-language", "en").split(",")[0].split("-")[0].lower()
+        return service.get_popular_characters(language=language)
     except Exception as e:
         logger.error(f"Error getting popular characters: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -253,6 +263,7 @@ async def generate_character_image(
 @router.get("/creator/{world_id}")
 async def get_creator_characters(
     world_id: str,
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """Get all characters created by a user with their stats"""
@@ -263,7 +274,9 @@ async def get_creator_characters(
             raise HTTPException(status_code=404, detail="User not found")
             
         service = CharacterService(db)
-        characters = service.get_creator_characters(user.id)
+        # Get language from request header
+        language = request.headers.get("accept-language", "en").split(",")[0].split("-")[0].lower()
+        characters = service.get_creator_characters(user.id, language=language)
         
         # Get stats for each character
         characters_with_stats = []
@@ -277,7 +290,8 @@ async def get_creator_characters(
                 "photo_url": character.photo_url,
                 "attributes": character.attributes,
                 "created_at": character.created_at,
-                "updated_at": character.updated_at
+                "updated_at": character.updated_at,
+                "language": character.language
             })
             
         return characters_with_stats
@@ -287,6 +301,7 @@ async def get_creator_characters(
 
 @router.get("/search/", response_model=List[CharacterResponse])
 async def search_characters(
+    request: Request,
     query: str = '',
     page: int = 1,
     per_page: int = 10,
@@ -296,7 +311,9 @@ async def search_characters(
     logger.info(f"Searching characters with query: {query}")
     try:
         character_service = CharacterService(db)
-        characters = character_service.search_characters(query.strip(), page, per_page)
+        # Get language from request header
+        language = request.headers.get("accept-language", "en").split(",")[0].split("-")[0].lower()
+        characters = character_service.search_characters(query.strip(), page, per_page, language=language)
         return characters
     except Exception as e:
         logger.error(f"Error searching characters: {str(e)}")

@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, or_
 from typing import List, Optional, Dict, Any
 from .base import BaseRepository
 from database.models import Character, User
@@ -8,16 +8,20 @@ class CharacterRepository(BaseRepository[Character]):
     def __init__(self, db: Session):
         super().__init__(Character, db)
     
-    def get_by_popularity(self, skip: int = 0, limit: int = 10) -> List[Character]:
+    def get_by_popularity(self, skip: int = 0, limit: int = 10, language: str = "en") -> List[Character]:
+        """Get characters ordered by number of messages"""
         return self.db.query(Character)\
+            .filter(Character.language == language)\
             .order_by(desc(Character.num_messages))\
             .offset(skip)\
             .limit(limit)\
             .all()
     
-    def get_by_creator(self, creator_id: int) -> List[Character]:
+    def get_by_creator(self, creator_id: int, language: str = "en") -> List[Character]:
+        """Get all characters created by a user"""
         return self.db.query(Character)\
             .filter(Character.creator_id == creator_id)\
+            .filter(Character.language == language)\
             .all()
     
     def get_character_stats(self, character_id: int):
@@ -49,19 +53,17 @@ class CharacterRepository(BaseRepository[Character]):
         self.db.refresh(character)
         return character
 
-    def search(self, query: str, skip: int = 0, limit: int = 10) -> List[Character]:
-        """Search characters by name, tagline, or description"""
-        search_term = f"%{query}%"
-        return (
-            self.db.query(Character)
+    def search(self, query: str, skip: int = 0, limit: int = 10, language: str = "en") -> List[Character]:
+        """Search characters by name or description"""
+        return self.db.query(Character)\
             .filter(
-                # Search across multiple fields
-                (Character.name.ilike(search_term)) |
-                (Character.tagline.ilike(search_term)) |
-                (Character.character_description.ilike(search_term))
-            )
-            .order_by(desc(Character.num_messages))  # Order by popularity
-            .offset(skip)
-            .limit(limit)
+                or_(
+                    Character.name.ilike(f"%{query}%"),
+                    Character.character_description.ilike(f"%{query}%"),
+                    Character.tagline.ilike(f"%{query}%")
+                )
+            )\
+            .filter(Character.language == language)\
+            .offset(skip)\
+            .limit(limit)\
             .all()
-        )

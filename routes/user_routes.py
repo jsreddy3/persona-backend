@@ -135,8 +135,8 @@ async def verify_world_id(
         user_repo = UserRepository(db)
         world_id_service = WorldIDService(user_repo)
         
-        # Get language from Accept-Language header
-        language = req.headers.get("accept-language", "en").split(",")[0].lower()
+        # Get language from Accept-Language header and take only first 2 chars
+        language = req.headers.get("accept-language", "en").split(",")[0].split("-")[0].lower()
         logger.info(f"Using language from header: {language}")
         
         result = await world_id_service.verify_proof(
@@ -145,7 +145,7 @@ async def verify_world_id(
             proof=request.proof,
             verification_level=request.verification_level,
             action=request.action,
-            language=language  # Use header language instead of request field
+            language=language
         )
         
         # Create session token after successful verification
