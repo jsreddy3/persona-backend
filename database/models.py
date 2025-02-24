@@ -72,7 +72,9 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_active = Column(DateTime, default=datetime.utcnow)
-    
+    photo_url = Column(String, nullable=True)
+    credits_spent = Column(Integer, default=0)
+  
     # Relationships
     created_characters = relationship("Character", back_populates="creator")
     created_conversations = relationship("Conversation", back_populates="creator")
