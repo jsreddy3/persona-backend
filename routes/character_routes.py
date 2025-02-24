@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
 from database.database import get_db
-from database.models import User
+from database.models import User, Character
 from services.character_service import CharacterService
 from services.image_service import ImageService
 from services.image_generation_service import ImageGenerationService
@@ -297,4 +297,41 @@ async def ping():
     return {
         "timestamp": datetime.datetime.now().isoformat(),
         "region": os.environ.get("HEROKU_REGION", "unknown")
+    }
+
+@router.get("/diagnose")
+async def diagnose(db: Session = Depends(get_db)):
+    """Diagnostic endpoint to check database and API latency"""
+    start_time = datetime.datetime.now()
+    
+    # Test DB connection
+    db_connect_start = datetime.datetime.now()
+    try:
+        # Simple query to test connection
+        db.execute("SELECT 1").first()
+        db_connect_time = (datetime.datetime.now() - db_connect_start).total_seconds()
+    except Exception as e:
+        db_connect_time = -1
+        logger.error(f"DB connection error: {str(e)}")
+    
+    # Test simple query
+    query_start = datetime.datetime.now()
+    try:
+        # Get count of characters as a simple test query
+        count = db.query(Character).count()
+        query_time = (datetime.datetime.now() - query_start).total_seconds()
+    except Exception as e:
+        count = -1
+        query_time = -1
+        logger.error(f"Query error: {str(e)}")
+    
+    total_time = (datetime.datetime.now() - start_time).total_seconds()
+    
+    return {
+        "timestamp": start_time.isoformat(),
+        "region": os.environ.get("HEROKU_REGION", "unknown"),
+        "db_connect_time": round(db_connect_time * 1000, 2),  # ms
+        "query_time": round(query_time * 1000, 2),  # ms
+        "total_time": round(total_time * 1000, 2),  # ms
+        "character_count": count
     }
