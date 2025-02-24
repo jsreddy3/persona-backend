@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from .base import BaseRepository
 from database.models import Character, User
 
@@ -48,3 +48,20 @@ class CharacterRepository(BaseRepository[Character]):
         self.db.commit()
         self.db.refresh(character)
         return character
+
+    def search(self, query: str, skip: int = 0, limit: int = 10) -> List[Character]:
+        """Search characters by name, tagline, or description"""
+        search_term = f"%{query}%"
+        return (
+            self.db.query(Character)
+            .filter(
+                # Search across multiple fields
+                (Character.name.ilike(search_term)) |
+                (Character.tagline.ilike(search_term)) |
+                (Character.character_description.ilike(search_term))
+            )
+            .order_by(desc(Character.num_messages))  # Order by popularity
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )

@@ -271,3 +271,20 @@ async def get_creator_characters(
     except Exception as e:
         logger.error(f"Error getting creator's characters: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/search/", response_model=List[CharacterResponse])
+async def search_characters(
+    query: str,
+    page: int = 1,
+    per_page: int = 10,
+    db: Session = Depends(get_db)
+):
+    """Search characters by name, tagline, or description"""
+    logger.info(f"Searching characters with query: {query}")
+    try:
+        character_service = CharacterService(db)
+        characters = character_service.search_characters(query, page, per_page)
+        return characters
+    except Exception as e:
+        logger.error(f"Error searching characters: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to search characters")

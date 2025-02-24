@@ -57,3 +57,8 @@ class CharacterService:
             return None
             
         return self.repository.update(character_id, {"photo_url": photo_url})
+
+    def search_characters(self, query: str, page: int = 1, per_page: int = 10) -> List[Character]:
+        """Search characters by name, tagline, or description"""
+        skip = (page - 1) * per_page
+        return self.repository.search(query, skip=skip, limit=per_page)
