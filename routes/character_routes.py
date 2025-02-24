@@ -71,26 +71,54 @@ async def create_character(
 ):
     """Create a new character"""
     try:
-        all_attributes = [
-            "intelligent", "charismatic", "brave", "compassionate", 
-            "creative", "resourceful", "loyal", "determined", 
-            "curious", "adaptable", "patient", "ambitious", 
-            "analytical", "intuitive", "passionate", "diplomatic", 
-            "strategic", "persistent", "empathetic", "confident", 
-            "perceptive", "methodical", "optimistic", "reserved",
-            "spontaneous", "pragmatic", "artistic", "philosophical",
-            "adventurous", "meticulous"
-        ]
+        all_attributes = {
+            "en": [
+                "chaotic", "mischievous", "unpredictable", "sarcastic", 
+                "provocative", "absurd", "irreverent", "rebellious", 
+                "dramatic", "exaggerated", "bizarre", "outrageous", 
+                "nonsensical", "contradictory", "inflammatory", "ridiculous", 
+                "eccentric", "obnoxious", "confusing", "irritating", 
+                "controversial", "unhinged", "deceptive", "bamboozling",
+                "eye-rolling", "cringe-worthy", "face-palming", "mind-boggling",
+                "rage-inducing", "insufferable"
+            ],
+            "es": [
+                "caótico", "travieso", "impredecible", "sarcástico", 
+                "provocativo", "absurdo", "irreverente", "rebelde", 
+                "dramático", "exagerado", "bizarro", "escandaloso", 
+                "sin sentido", "contradictorio", "inflamatorio", "ridículo", 
+                "excéntrico", "odioso", "confuso", "irritante", 
+                "controversial", "desquiciado", "engañoso", "desconcertante",
+                "exasperante", "vergonzoso", "indignante", "alucinante",
+                "enfurecedor", "insufrible"
+            ],
+            "pt": [
+                "caótico", "travesso", "imprevisível", "sarcástico", 
+                "provocativo", "absurdo", "irreverente", "rebelde", 
+                "dramático", "exagerado", "bizarro", "escandaloso", 
+                "sem sentido", "contraditório", "inflamatório", "ridículo", 
+                "excêntrico", "odioso", "confuso", "irritante", 
+                "controverso", "descontrolado", "enganoso", "desconcertante",
+                "exasperante", "constrangedor", "indignante", "alucinante",
+                "enfurecedor", "insuportável"
+            ]
+        }
         
-        # Randomly select two attributes
+        # Get language from request header
+        language = request.headers.get("accept-language", "en").split(",")[0].split("-")[0].lower()
+        
+        # Default to English if language not supported
+        if language not in ["en", "es", "pt"]:
+            language = "en"
+            
+        logger.info(f"Creating character with language: {language}")
+        
+        # Randomly select two attributes in the user's language
         import random
-        selected_attributes = random.sample(all_attributes, 2)
+        selected_attributes = random.sample(all_attributes[language], 2)
         
         # Create character
         service = CharacterService(db)
-        # Get language from request header
-        language = request.headers.get("accept-language", "en").split(",")[0].split("-")[0].lower()
-        logger.info(f"Creating character with language: {language}")
         
         new_character = service.create_character(
             name=character.name,
@@ -99,7 +127,7 @@ async def create_character(
             tagline=character.tagline,
             photo_url=character.photo_url,
             creator_id=current_user.id,
-            attributes=selected_attributes,  # Using our randomly selected attributes instead
+            attributes=selected_attributes,
             language=language
         )
         
