@@ -9,6 +9,8 @@ from services.image_service import ImageService
 from services.image_generation_service import ImageGenerationService
 from dependencies.auth import get_current_user
 import logging
+import datetime
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -288,3 +290,11 @@ async def search_characters(
     except Exception as e:
         logger.error(f"Error searching characters: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to search characters")
+
+@router.get("/ping")
+async def ping():
+    """Diagnostic endpoint to check latency"""
+    return {
+        "timestamp": datetime.datetime.now().isoformat(),
+        "region": os.environ.get("HEROKU_REGION", "unknown")
+    }
