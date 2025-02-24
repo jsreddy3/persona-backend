@@ -71,6 +71,21 @@ async def create_character(
 ):
     """Create a new character"""
     try:
+        all_attributes = [
+            "intelligent", "charismatic", "brave", "compassionate", 
+            "creative", "resourceful", "loyal", "determined", 
+            "curious", "adaptable", "patient", "ambitious", 
+            "analytical", "intuitive", "passionate", "diplomatic", 
+            "strategic", "persistent", "empathetic", "confident", 
+            "perceptive", "methodical", "optimistic", "reserved",
+            "spontaneous", "pragmatic", "artistic", "philosophical",
+            "adventurous", "meticulous"
+        ]
+        
+        # Randomly select two attributes
+        import random
+        selected_attributes = random.sample(all_attributes, 2)
+        
         # Create character
         service = CharacterService(db)
         # Get language from request header
@@ -84,7 +99,7 @@ async def create_character(
             tagline=character.tagline,
             photo_url=character.photo_url,
             creator_id=current_user.id,
-            attributes=character.attributes,
+            attributes=selected_attributes,  # Using our randomly selected attributes instead
             language=language
         )
         
