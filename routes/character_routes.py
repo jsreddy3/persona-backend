@@ -158,7 +158,7 @@ async def create_character(
                     else:
                         logger.error("Failed to get URL from Cloudinary upload")
                 else:
-                    # logger.error("Failed to generate image data from getimg.ai")
+                    logger.error("Failed to generate image data from getimg.ai")
                 
             except Exception as e:
                 logger.error(f"Failed to generate initial character image: {str(e)}", exc_info=True)
