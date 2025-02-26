@@ -128,7 +128,7 @@ async def create_conversation(
 ):
     try:
         service = ConversationService(db)
-        conv = service.create_conversation(
+        conv = await service.create_conversation(
             character_id=conversation.character_id,
             user_id=current_user.id,
             language=conversation.language
