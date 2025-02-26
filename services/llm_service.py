@@ -36,7 +36,7 @@ class LLMService:
             base_url="https://api.fireworks.ai/inference/v1"
         )
         
-        logger.info(f"LLM Service initialized with model: {self.config.model}")
+        # logger.info(f"LLM Service initialized with model: {self.config.model}")
 
     def _get_windowed_messages(
         self,
@@ -70,9 +70,9 @@ class LLMService:
         })
         
         # Log windowed messages
-        logger.info(f"Using {len(messages)-1} messages from history (window_size={self.config.window_size} pairs)")
-        for i, msg in enumerate(messages):
-            logger.info(f"Message {i}: role={msg['role']}, content={msg['content'][:50]}...")
+        # logger.info(f"Using {len(messages)-1} messages from history (window_size={self.config.window_size} pairs)")
+        # for i, msg in enumerate(messages):
+        #     logger.info(f"Message {i}: role={msg['role']}, content={msg['content'][:50]}...")
             
         return messages
 
@@ -95,7 +95,7 @@ class LLMService:
             # Get windowed messages
             messages = self._get_windowed_messages(system_message, conversation_history, new_message)
             
-            logger.info(f"Sending request to LLM with {len(messages)} messages")
+            # logger.info(f"Sending request to LLM with {len(messages)} messages")
             
             # Call LLM with Fireworks parameters using OpenAI client
             response = await self.client.chat.completions.create(
@@ -135,7 +135,7 @@ class LLMService:
             # Get windowed messages
             messages = self._get_windowed_messages(system_message, conversation_history, new_message)
             
-            logger.info(f"Starting streaming request to LLM with {len(messages)} messages")
+            # logger.info(f"Starting streaming request to LLM with {len(messages)} messages")
             
             # Call LLM with streaming and Fireworks parameters using OpenAI client
             response = await self.client.chat.completions.create(

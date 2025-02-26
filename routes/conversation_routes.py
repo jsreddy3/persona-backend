@@ -111,7 +111,7 @@ async def get_conversations(
 ):
     """Get all conversations for the current user with character details"""
     try:
-        logger.info(f"Getting conversations for user {current_user.id} (email: {current_user.email})")
+        # logger.info(f"Getting conversations for user {current_user.id} (email: {current_user.email})")
         service = ConversationService(db)
         conversations = service.get_conversations_with_characters(current_user.id)
         return conversations

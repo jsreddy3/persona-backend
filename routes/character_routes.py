@@ -137,28 +137,28 @@ async def create_character(
                 logger.info(f"Starting image generation for character {new_character.id}")
                 # Create a prompt combining name and description
                 prompt = f"A portrait of {character.name}. {character.character_description}"
-                logger.info(f"Using prompt: {prompt}")
+                # logger.info(f"Using prompt: {prompt}")
                 
                 # Generate image
                 image_gen = ImageGenerationService()
-                logger.info("Calling getimg.ai API...")
+                # logger.info("Calling getimg.ai API...")
                 image_data = image_gen.generate_image(prompt=prompt)
                 
                 if image_data:
-                    logger.info("Image generated successfully, uploading to Cloudinary...")
+                    # logger.info("Image generated successfully, uploading to Cloudinary...")
                     # Upload to cloudinary
                     image_service = ImageService()
                     url = image_service.upload_character_image(image_data, new_character.id)
                     
                     if url:
-                        logger.info(f"Image uploaded successfully, URL: {url}")
+                        # logger.info(f"Image uploaded successfully, URL: {url}")
                         # Update character
                         new_character = service.update_character_image(new_character.id, url)
                         logger.info("Character photo_url updated in database")
                     else:
                         logger.error("Failed to get URL from Cloudinary upload")
                 else:
-                    logger.error("Failed to generate image data from getimg.ai")
+                    # logger.error("Failed to generate image data from getimg.ai")
                 
             except Exception as e:
                 logger.error(f"Failed to generate initial character image: {str(e)}", exc_info=True)

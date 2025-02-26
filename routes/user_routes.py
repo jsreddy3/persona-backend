@@ -77,7 +77,7 @@ async def verify_world_id_credentials(
             logger.error(f"No verification found for nullifier_hash: {parsed_creds.nullifier_hash}")
             return None
         
-        logger.info(f"Found verification for nullifier_hash: {parsed_creds.nullifier_hash}")
+        # logger.info(f"Found verification for nullifier_hash: {parsed_creds.nullifier_hash}")
         
         # Update user's last_active timestamp
         user = db.query(User).filter(
@@ -85,7 +85,7 @@ async def verify_world_id_credentials(
         ).first()
         
         if user:
-            logger.info(f"Updating last_active for user: {user.world_id}")
+            # logger.info(f"Updating last_active for user: {user.world_id}")
             user.last_active = datetime.utcnow()
             db.commit()
         else:
@@ -131,13 +131,13 @@ async def verify_world_id(
 ):
     """Verify a World ID proof and create/update user"""
     try:
-        logger.info(f"Verifying request: {request}")
+        # logger.info(f"Verifying request: {request}")
         user_repo = UserRepository(db)
         world_id_service = WorldIDService(user_repo)
         
         # Get language from Accept-Language header and take only first 2 chars
         language = req.headers.get("accept-language", "en").split(",")[0].split("-")[0].lower()
-        logger.info(f"Using language from header: {language}")
+        # logger.info(f"Using language from header: {language}")
         
         result = await world_id_service.verify_proof(
             nullifier_hash=request.nullifier_hash,
