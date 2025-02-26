@@ -425,6 +425,178 @@ async def get_users(
         logger.error(f"Error getting users: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get users: {str(e)}")
 
+@router.get("/users/{user_id}", response_model=AdminUserResponse)
+async def get_user_by_id(
+    user_id: int,
+    db: Session = Depends(get_db),
+    is_admin: bool = Depends(get_admin_access)
+):
+    """Get a single user by ID with detailed information"""
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Get character count
+        character_count = db.query(func.count(Character.id)).filter(
+            Character.creator_id == user.id
+        ).scalar()
+        
+        # Get conversation count
+        conversation_count = db.query(func.count(Conversation.id)).filter(
+            Conversation.creator_id == user.id
+        ).scalar()
+        
+        # Get message count
+        message_count = db.query(func.count(Message.id)).join(
+            Conversation, Conversation.id == Message.conversation_id
+        ).filter(
+            Conversation.creator_id == user.id
+        ).scalar()
+        
+        return AdminUserResponse(
+            id=user.id,
+            world_id=user.world_id,
+            username=user.username,
+            email=user.email,
+            language=user.language,
+            credits=user.credits,
+            wallet_address=user.wallet_address,
+            created_at=user.created_at,
+            last_active=user.last_active,
+            credits_spent=user.credits_spent,
+            character_count=character_count,
+            conversation_count=conversation_count,
+            message_count=message_count
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting user by ID: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get user: {str(e)}")
+
+class UserUpdateRequest(BaseModel):
+    username: Optional[str] = None
+    email: Optional[str] = None
+    language: Optional[str] = None
+    credits: Optional[int] = None
+    wallet_address: Optional[str] = None
+
+@router.put("/users/{user_id}", response_model=AdminUserResponse)
+async def update_user(
+    user_id: int,
+    user_data: UserUpdateRequest,
+    db: Session = Depends(get_db),
+    is_admin: bool = Depends(get_admin_access)
+):
+    """Update a user's information"""
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Update user fields if provided
+        if user_data.username is not None:
+            user.username = user_data.username
+        
+        if user_data.email is not None:
+            user.email = user_data.email
+        
+        if user_data.language is not None:
+            user.language = user_data.language
+        
+        if user_data.credits is not None:
+            user.credits = user_data.credits
+        
+        if user_data.wallet_address is not None:
+            user.wallet_address = user_data.wallet_address
+        
+        # Save changes
+        db.commit()
+        db.refresh(user)
+        
+        # Get character count
+        character_count = db.query(func.count(Character.id)).filter(
+            Character.creator_id == user.id
+        ).scalar()
+        
+        # Get conversation count
+        conversation_count = db.query(func.count(Conversation.id)).filter(
+            Conversation.creator_id == user.id
+        ).scalar()
+        
+        # Get message count
+        message_count = db.query(func.count(Message.id)).join(
+            Conversation, Conversation.id == Message.conversation_id
+        ).filter(
+            Conversation.creator_id == user.id
+        ).scalar()
+        
+        return AdminUserResponse(
+            id=user.id,
+            world_id=user.world_id,
+            username=user.username,
+            email=user.email,
+            language=user.language,
+            credits=user.credits,
+            wallet_address=user.wallet_address,
+            created_at=user.created_at,
+            last_active=user.last_active,
+            credits_spent=user.credits_spent,
+            character_count=character_count,
+            conversation_count=conversation_count,
+            message_count=message_count
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating user: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update user: {str(e)}")
+
+@router.delete("/users/{user_id}", status_code=204)
+async def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    is_admin: bool = Depends(get_admin_access)
+):
+    """Delete a user"""
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Delete user's conversations and messages
+        conversations = db.query(Conversation).filter(Conversation.creator_id == user_id).all()
+        for conversation in conversations:
+            # Delete messages in the conversation
+            db.query(Message).filter(Message.conversation_id == conversation.id).delete()
+        
+        # Delete conversations
+        db.query(Conversation).filter(Conversation.creator_id == user_id).delete()
+        
+        # Delete characters created by the user
+        db.query(Character).filter(Character.creator_id == user_id).delete()
+        
+        # Delete payments
+        db.query(Payment).filter(Payment.user_id == user_id).delete()
+        
+        # Delete sessions
+        db.query(Session).filter(Session.user_id == user_id).delete()
+        
+        # Finally, delete the user
+        db.delete(user)
+        db.commit()
+        
+        return None
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting user: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete user: {str(e)}")
+
 # --- Character Management Endpoints ---
 
 @router.get("/characters", response_model=Dict[str, Any])
