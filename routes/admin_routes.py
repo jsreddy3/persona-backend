@@ -353,10 +353,12 @@ async def get_users(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     search: Optional[str] = None,
+    sort_by: Optional[str] = "id",
+    sort_dir: Optional[str] = "desc",
     db: Session = Depends(get_db),
     is_admin: bool = Depends(get_admin_access)
 ):
-    """Get all users with pagination and optional search"""
+    """Get all users with pagination, optional search, and sorting"""
     try:
         query = db.query(User)
         
@@ -374,8 +376,32 @@ async def get_users(
         # Calculate total for pagination
         total = query.count()
         
+        # Apply sorting based on parameters
+        if sort_by and sort_dir:
+            # Validate sort direction
+            if sort_dir not in ["asc", "desc"]:
+                sort_dir = "desc"  # Default to descending if invalid
+            
+            # Apply sorting based on field
+            if sort_by == "id":
+                query = query.order_by(desc(User.id) if sort_dir == "desc" else User.id)
+            elif sort_by == "username":
+                query = query.order_by(desc(User.username) if sort_dir == "desc" else User.username)
+            elif sort_by == "credits":
+                query = query.order_by(desc(User.credits) if sort_dir == "desc" else User.credits)
+            elif sort_by == "created_at":
+                query = query.order_by(desc(User.created_at) if sort_dir == "desc" else User.created_at)
+            elif sort_by == "last_active":
+                query = query.order_by(desc(User.last_active) if sort_dir == "desc" else User.last_active)
+            else:
+                # Default to created_at if sort field is not directly available
+                query = query.order_by(desc(User.created_at) if sort_dir == "desc" else User.created_at)
+        else:
+            # Default sorting by created_at descending
+            query = query.order_by(desc(User.created_at))
+        
         # Apply pagination
-        users = query.order_by(desc(User.created_at)).offset((page - 1) * limit).limit(limit).all()
+        users = query.offset((page - 1) * limit).limit(limit).all()
         
         # Enhance user data with additional information
         result = []
@@ -397,7 +423,7 @@ async def get_users(
                 Conversation.creator_id == user.id
             ).scalar()
             
-            result.append(AdminUserResponse(
+            user_data = AdminUserResponse(
                 id=user.id,
                 world_id=user.world_id,
                 username=user.username,
@@ -411,7 +437,14 @@ async def get_users(
                 character_count=character_count,
                 conversation_count=conversation_count,
                 message_count=message_count
-            ))
+            )
+            result.append(user_data)
+        
+        # For fields that require post-query sorting (like character_count, conversation_count, message_count)
+        if sort_by in ["character_count", "conversation_count", "message_count"]:
+            # Sort the result list after all data is collected
+            reverse = sort_dir == "desc"
+            result.sort(key=lambda x: getattr(x, sort_by), reverse=reverse)
         
         # Return with pagination metadata
         return {
