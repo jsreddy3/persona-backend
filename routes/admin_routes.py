@@ -85,6 +85,11 @@ class DashboardStats(BaseModel):
     conversationGrowth: float
     characterGrowth: float
     creditGrowth: float
+    # Additional stats for detailed view
+    newMessages: Optional[int] = None
+    avgMessagesPerConversation: Optional[float] = None
+    activeUsers: Optional[int] = None
+    completionRate: Optional[float] = None
 
 class ActivityItem(BaseModel):
     id: str
@@ -175,6 +180,36 @@ async def get_dashboard_stats(
         character_growth = calculate_24h_growth(characters_24h, total_characters)
         credit_growth = calculate_24h_growth(credits_24h, total_credits)
         
+        # Additional detailed stats
+        
+        # New messages in the last 24 hours
+        new_messages = db.query(func.count(Message.id)).filter(
+            Message.created_at >= one_day_ago
+        ).scalar() or 0
+        
+        # Average messages per conversation
+        avg_messages = db.query(func.avg(
+            db.query(func.count(Message.id))
+            .filter(Message.conversation_id == Conversation.id)
+            .correlate(Conversation)
+            .as_scalar()
+        )).scalar() or 0
+        
+        # Active users in the last 24 hours (users who sent at least one message)
+        active_users = db.query(func.count(func.distinct(Conversation.creator_id))).filter(
+            Conversation.updated_at >= one_day_ago
+        ).scalar() or 0
+        
+        # Completion rate (percentage of conversations with at least 3 messages)
+        total_convs = db.query(func.count(Conversation.id)).scalar() or 1  # Avoid division by zero
+        completed_convs = db.query(func.count(Conversation.id)).filter(
+            db.query(func.count(Message.id))
+            .filter(Message.conversation_id == Conversation.id)
+            .correlate(Conversation)
+            .as_scalar() >= 3
+        ).scalar() or 0
+        completion_rate = (completed_convs / total_convs) * 100
+        
         return DashboardStats(
             totalUsers=total_users,
             activeConversations=active_conversations,
@@ -183,7 +218,12 @@ async def get_dashboard_stats(
             userGrowth=user_growth,
             conversationGrowth=conversation_growth,
             characterGrowth=character_growth,
-            creditGrowth=credit_growth
+            creditGrowth=credit_growth,
+            # Additional detailed stats
+            newMessages=new_messages,
+            avgMessagesPerConversation=round(avg_messages, 1),
+            activeUsers=active_users,
+            completionRate=round(completion_rate, 1),
         )
     except Exception as e:
         logger.error(f"Error getting dashboard stats: {str(e)}")
