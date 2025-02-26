@@ -51,7 +51,7 @@ class CharacterService:
         """Get character details by ID"""
         # logger.info(f"Getting character with ID {character_id} for language: {language}")
         character = self.repository.get_by_id(character_id)
-        if character and character.language == language:
+        # if character and character.language == language:
             # logger.info(f"Found character with ID {character_id} for language {language}")
         return character
     
