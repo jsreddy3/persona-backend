@@ -9,11 +9,8 @@ from routes import (
     conversation_routes,
     payment_routes,
     token_routes,
-<<<<<<< HEAD
     timing_routes
-=======
     admin_routes
->>>>>>> becfedc36f49a65e6e06d622ed49e007148bedb2
 )
 from middleware import TimingMiddleware
 from database.init_db import init_db
@@ -73,11 +70,8 @@ app.include_router(character_routes.router, prefix=f"{api_prefix}/characters", t
 app.include_router(conversation_routes.router, prefix=f"{api_prefix}/conversations", tags=["conversations"])
 app.include_router(payment_routes.router, prefix=f"{api_prefix}/payments", tags=["payments"])
 app.include_router(token_routes.router, prefix=f"{api_prefix}/tokens", tags=["tokens"])
-<<<<<<< HEAD
 app.include_router(timing_routes.router, prefix=f"{api_prefix}/timing", tags=["timing"])
-=======
 app.include_router(admin_routes.router, prefix=f"{api_prefix}/admin", tags=["admin"])
->>>>>>> becfedc36f49a65e6e06d622ed49e007148bedb2
 
 # Print all registered routes for debugging
 for route in app.routes:
