@@ -145,33 +145,35 @@ async def get_dashboard_stats(
             Payment.status == "confirmed"
         ).scalar() or 0
         
-        # Get counts from 30 days ago for growth calculation
-        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+        # Get counts from 24 hours ago for growth calculation
+        one_day_ago = datetime.utcnow() - timedelta(days=1)
         
-        users_30d_ago = db.query(func.count(User.id)).filter(
-            User.created_at <= thirty_days_ago
+        # Users created in the last 24 hours
+        users_24h = db.query(func.count(User.id)).filter(
+            User.created_at >= one_day_ago
         ).scalar()
         
-        conversations_30d_ago = db.query(func.count(Conversation.id)).filter(
-            Conversation.created_at <= thirty_days_ago
+        # Active conversations in the last 24 hours (already calculated above)
+        
+        # Characters created in the last 24 hours
+        characters_24h = db.query(func.count(Character.id)).filter(
+            Character.created_at >= one_day_ago
         ).scalar()
         
-        characters_30d_ago = db.query(func.count(Character.id)).filter(
-            Character.created_at <= thirty_days_ago
-        ).scalar()
-        
-        credits_30d_ago = db.query(func.sum(Payment.amount)).filter(
+        # Credits purchased in the last 24 hours
+        credits_24h = db.query(func.sum(Payment.amount)).filter(
             and_(
                 Payment.status == "confirmed",
-                Payment.created_at <= thirty_days_ago
+                Payment.created_at >= one_day_ago
             )
         ).scalar() or 0
         
-        # Calculate growth percentages
-        user_growth = calculate_growth(users_30d_ago, total_users)
-        conversation_growth = calculate_growth(conversations_30d_ago, active_conversations)
-        character_growth = calculate_growth(characters_30d_ago, total_characters)
-        credit_growth = calculate_growth(credits_30d_ago, total_credits)
+        # Calculate growth percentages based on 24-hour contribution
+        # For a new app, we'll show the percentage of total that was added in the last 24h
+        user_growth = calculate_24h_growth(users_24h, total_users)
+        conversation_growth = 100.0  # All active conversations are by definition from last 24h
+        character_growth = calculate_24h_growth(characters_24h, total_characters)
+        credit_growth = calculate_24h_growth(credits_24h, total_credits)
         
         return DashboardStats(
             totalUsers=total_users,
@@ -836,10 +838,10 @@ async def get_conversation_detail(
 
 # --- Helper Functions ---
 
-def calculate_growth(old_value, new_value):
-    """Calculate growth percentage between two values"""
-    if old_value == 0:
-        return 100.0 if new_value > 0 else 0.0
+def calculate_24h_growth(last_24h_value, total_value):
+    """Calculate what percentage of the total was added in the last 24 hours"""
+    if total_value == 0:
+        return 0.0
     
-    growth = ((new_value - old_value) / old_value) * 100.0
-    return round(growth, 1) 
+    percentage = (last_24h_value / total_value) * 100.0
+    return round(percentage, 1) 
