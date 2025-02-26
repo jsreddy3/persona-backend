@@ -1,4 +1,4 @@
-from sqlalchemy import Table, Column, Integer, String, ForeignKey, DateTime, Float, Text, JSON
+from sqlalchemy import Table, Column, Integer, String, ForeignKey, DateTime, Float, Text, JSON, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
@@ -117,3 +117,37 @@ class WorldIDVerification(Base):
     
     # Relationship
     user = relationship("User", back_populates="verifications")
+
+class RequestLog(Base):
+    __tablename__ = "request_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    request_id = Column(String, nullable=False, index=True)
+    endpoint = Column(String, nullable=False, index=True)
+    method = Column(String, nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    total_time_ms = Column(Float, nullable=False)
+    llm_time_ms = Column(Float, default=0.0)
+    db_time_ms = Column(Float, default=0.0)
+    db_operations = Column(Integer, default=0)
+    network_time_ms = Column(Float, default=0.0)
+    app_time_ms = Column(Float, default=0.0)
+    markers = Column(JSON, default=dict)
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "request_id": self.request_id,
+            "endpoint": self.endpoint,
+            "method": self.method,
+            "user_id": self.user_id,
+            "timestamp": self.timestamp.isoformat(),
+            "total_time_ms": self.total_time_ms,
+            "llm_time_ms": self.llm_time_ms,
+            "db_time_ms": self.db_time_ms,
+            "db_operations": self.db_operations,
+            "network_time_ms": self.network_time_ms,
+            "app_time_ms": self.app_time_ms,
+            "markers": self.markers
+        }

@@ -5,6 +5,7 @@ import os
 import logging
 from dotenv import load_dotenv
 from database.models import Message
+from services.timing import time_network_operation
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,7 @@ class LLMService:
             
         return messages
 
+    @time_network_operation
     async def process_message(
         self,
         system_message: str,
@@ -116,6 +118,7 @@ class LLMService:
             logger.error(f"Error in LLM service: {str(e)}")
             raise RuntimeError(f"Failed to process message: {str(e)}")
             
+    @time_network_operation
     async def stream_message(
         self,
         system_message: str,

@@ -8,8 +8,10 @@ from routes import (
     character_routes,
     conversation_routes,
     payment_routes,
-    token_routes
+    token_routes,
+    timing_routes
 )
+from middleware import TimingMiddleware
 from database.init_db import init_db
 import logging
 
@@ -38,6 +40,9 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
+# Add timing middleware
+app.add_middleware(TimingMiddleware)
+
 # Language middleware
 @app.middleware("http")
 async def get_accept_language(request: Request, call_next):
@@ -62,6 +67,7 @@ app.include_router(character_routes.router, prefix=f"{api_prefix}/characters", t
 app.include_router(conversation_routes.router, prefix=f"{api_prefix}/conversations", tags=["conversations"])
 app.include_router(payment_routes.router, prefix=f"{api_prefix}/payments", tags=["payments"])
 app.include_router(token_routes.router, prefix=f"{api_prefix}/tokens", tags=["tokens"])
+app.include_router(timing_routes.router, prefix=f"{api_prefix}/timing", tags=["timing"])
 
 # Print all registered routes for debugging
 for route in app.routes:

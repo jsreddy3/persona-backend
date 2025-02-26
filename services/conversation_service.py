@@ -5,6 +5,7 @@ from repositories.user_repository import UserRepository
 from repositories.character_repository import CharacterRepository
 from services.llm_service import LLMService
 from database.models import Conversation, Message, User
+from services.timing import time_db_operation, time_llm_operation, time_network_operation
 import yaml
 import os
 import logging
@@ -38,7 +39,8 @@ class ConversationService:
             "zh"   # Chinese
         ]
     
-    def create_conversation(self, character_id: int, user_id: int, language: str = "en") -> Conversation:
+    @time_db_operation
+    async def create_conversation(self, character_id: int, user_id: int, language: str = "en") -> Conversation:
         """
         Create a new conversation with initial greeting messages
         """
@@ -102,6 +104,7 @@ class ConversationService:
         
         return conversation
     
+    @time_db_operation
     async def process_user_message(self, user_id: int, conversation_id: int, message_content: str) -> Tuple[Message, Message]:
         """
         Process a user message and generate AI response
@@ -128,7 +131,7 @@ class ConversationService:
             history = self.get_conversation_messages(conversation_id)
             
             # Get AI response using LLM service first
-            ai_response = await self.llm_service.process_message(
+            ai_response = await self._generate_ai_response(
                 conversation.system_message,
                 history,
                 message_content
@@ -160,6 +163,12 @@ class ConversationService:
             self.db.rollback()
             raise ValueError(f"Failed to process message: {str(e)}")
     
+    @time_llm_operation
+    async def _generate_ai_response(self, system_message: str, history: List[Message], user_message: str) -> str:
+        """Internal method to generate AI response, wrapped with timing decorator"""
+        return await self.llm_service.process_message(system_message, history, user_message)
+    
+    @time_db_operation
     async def stream_user_message(self, user_id: int, conversation_id: int, message_content: str):
         """
         Stream process a user message and generate AI response token by token
@@ -201,7 +210,7 @@ class ConversationService:
             
             # Stream AI response and accumulate content
             accumulated_content = ""
-            async for token in self.llm_service.stream_message(
+            async for token in self._stream_ai_response(
                 conversation.system_message,
                 history,
                 message_content
@@ -223,15 +232,24 @@ class ConversationService:
             self.db.rollback()
             raise ValueError(f"Failed to process message: {str(e)}")
     
+    @time_llm_operation
+    async def _stream_ai_response(self, system_message: str, history: List[Message], user_message: str):
+        """Internal method to stream AI response, wrapped with timing decorator"""
+        async for token in self.llm_service.stream_message(system_message, history, user_message):
+            yield token
+    
+    @time_db_operation
     def get_conversation_messages(self, conversation_id: int) -> List[Message]:
         """Get all messages in a conversation except the initial user greeting"""
         messages = self.repository.get_messages(conversation_id)
         # Filter out the first message (user's "hello")
         return messages[1:] if messages else []
     
+    @time_db_operation
     def get_user_conversations(self, user_id: int) -> List[Conversation]:
         return self.repository.get_by_participant(user_id)
     
+    @time_db_operation
     def get_conversations_with_characters(self, user_id: int):
         """Get all conversations for a user with character details included"""
         conversations = self.repository.get_by_user_id_with_characters(user_id)
