@@ -101,6 +101,66 @@ async def create_character(
                 "controverso", "descontrolado", "enganoso", "desconcertante",
                 "exasperante", "constrangedor", "indignante", "alucinante",
                 "enfurecedor", "insuportável"
+            ],
+            "id": [
+              "kacau", "nakal", "tidak terduga", "sarkastik",
+              "provokatif", "absurd", "tidak sopan", "memberontak",
+              "dramatis", "berlebihan", "aneh", "mengejutkan",
+              "tidak masuk akal", "kontradiktif", "memicu", "konyol",
+              "eksentrik", "menyebalkan", "membingungkan", "mengganggu",
+              "kontroversial", "tidak waras", "menipu", "membodohi",
+              "memutar mata", "memalukan", "menggelengkan kepala", "membingungkan pikiran",
+              "memicu kemarahan", "tak tertahankan"
+            ],
+            "ko": [
+              "혼란스러운", "장난스러운", "예측할 수 없는", "비꼬는",
+              "도발적인", "황당한", "불경스러운", "반항적인",
+              "극적인", "과장된", "기괴한", "충격적인",
+              "무의미한", "모순적인", "선동적인", "우스꽝스러운",
+              "괴짜의", "불쾌한", "혼란스러운", "짜증나는",
+              "논란이 많은", "제정신이 아닌", "기만적인", "혼란스럽게 하는",
+              "눈을 굴리게 하는", "민망한", "얼굴을 감싸게 하는", "난해한",
+              "분노를 유발하는", "참을 수 없는"
+            ],
+            "ja": [
+              "混沌とした", "いたずら好きな", "予測不能な", "皮肉な",
+              "挑発的な", "不条理な", "不敬な", "反抗的な",
+              "劇的な", "大げさな", "奇妙な", "常軌を逸した",
+              "ナンセンスな", "矛盾した", "扇動的な", "ばかげた",
+              "風変わりな", "不快な", "混乱させる", "いらだたせる",
+              "物議を醸す", "支離滅裂な", "欺瞞的な", "困惑させる",
+              "目を回させる", "恥ずかしい", "顔を覆いたくなる", "理解を超える",
+              "激怒させる", "耐え難い"
+            ],
+            "fr": [
+              "chaotique", "espiègle", "imprévisible", "sarcastique",
+              "provocateur", "absurde", "irrévérencieux", "rebelle",
+              "dramatique", "exagéré", "bizarre", "scandaleux",
+              "insensé", "contradictoire", "incendiaire", "ridicule",
+              "excentrique", "odieux", "déroutant", "irritant",
+              "controversé", "déséquilibré", "trompeur", "déconcertant",
+              "exaspérant", "embarrassant", "consternant", "ahurissant",
+              "enrageant", "insupportable"
+            ],
+            "de": [
+              "chaotisch", "schelmisch", "unberechenbar", "sarkastisch",
+              "provokativ", "absurd", "respektlos", "rebellisch",
+              "dramatisch", "übertrieben", "bizarr", "unerhört",
+              "unsinnig", "widersprüchlich", "aufwiegelnd", "lächerlich",
+              "exzentrisch", "unausstehlich", "verwirrend", "ärgerlich",
+              "umstritten", "durchgeknallt", "täuschend", "verblüffend",
+              "augenrollend", "peinlich", "fassungslos machend", "verblüffend",
+              "wutentfachend", "unerträglich"
+            ],
+            "zh": [
+              "混乱的", "淘气的", "不可预测的", "讽刺的",
+              "挑衅的", "荒谬的", "不敬的", "叛逆的",
+              "戏剧性的", "夸张的", "怪异的", "离谱的",
+              "荒唐的", "矛盾的", "煽动性的", "可笑的",
+              "古怪的", "令人讨厌的", "令人困惑的", "恼人的",
+              "有争议的", "失控的", "欺骗性的", "令人迷惑的",
+              "令人翻白眼的", "令人尴尬的", "令人捂脸的", "令人费解的",
+              "激怒人的", "难以忍受的"
             ]
         }
         
@@ -108,8 +168,8 @@ async def create_character(
         language = request.headers.get("accept-language", "en").split(",")[0].split("-")[0].lower()
         
         # Default to English if language not supported
-        if language not in ["en", "es", "pt"]:
-            language = "en"
+        if language not in ["en", "es", "pt", "ko", "ja", "id", "fr", "de", "zh"]:
+            language = "rest"
             
         logger.info(f"Creating character with language: {language}")
         

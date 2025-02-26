@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 import json
 import logging
+import re
 from database.database import get_db
 from database.models import User, WorldIDVerification
 from repositories.user_repository import UserRepository
@@ -44,6 +45,39 @@ class UserUpdate(BaseModel):
     email: Optional[str] = None
     language: Optional[str] = None
     wallet_address: Optional[str] = None
+
+def parse_accept_language(accept_language: str) -> str:
+    """
+    Parse the Accept-Language header and return the best language code.
+    Format can be like: 'en-US,en;q=0.9,es;q=0.8,de;q=0.7'
+    Returns lowercase 2-letter language code.
+    """
+    if not accept_language:
+        return "en"  # Default to English
+    
+    # Parse the header to extract languages and their quality values
+    languages = []
+    
+    # Using regex to handle various formats of Accept-Language
+    pattern = re.compile(r'([a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})?)\s*(;\s*q\s*=\s*((1(\.0)?)|0\.\d+))?')
+    
+    for match in pattern.finditer(accept_language):
+        lang = match.group(1)
+        # If quality factor is present, use it; otherwise, assume 1.0
+        q = match.group(4) or "1.0"
+        languages.append((lang, float(q)))
+    
+    # Sort by quality factor, highest first
+    languages.sort(key=lambda x: x[1], reverse=True)
+    
+    if not languages:
+        return "en"
+    
+    # Get the primary language code (first two letters) from the best match
+    best_lang = languages[0][0].split('-')[0].lower()
+    
+    logger.info(f"Parsed Accept-Language header: {accept_language} -> {best_lang}")
+    return best_lang
 
 async def verify_world_id_credentials(
     request: Request,
@@ -135,9 +169,10 @@ async def verify_world_id(
         user_repo = UserRepository(db)
         world_id_service = WorldIDService(user_repo)
         
-        # Get language from Accept-Language header and take only first 2 chars
-        language = req.headers.get("accept-language", "en").split(",")[0].split("-")[0].lower()
-        # logger.info(f"Using language from header: {language}")
+        # Get language from Accept-Language header
+        accept_language = req.headers.get("accept-language", "en")
+        language = parse_accept_language(accept_language)
+        logger.info(f"Using language from header: {language}")
         
         result = await world_id_service.verify_proof(
             nullifier_hash=request.nullifier_hash,

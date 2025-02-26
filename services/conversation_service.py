@@ -7,6 +7,10 @@ from services.llm_service import LLMService
 from database.models import Conversation, Message, User
 import yaml
 import os
+import logging
+
+# Set up logger
+logger = logging.getLogger(__name__)
 
 class ConversationService:
     def __init__(self, db: Session):
@@ -20,8 +24,21 @@ class ConversationService:
         prompts_path = os.path.join(os.path.dirname(__file__), 'prompts.yaml')
         with open(prompts_path, 'r') as f:
             self.prompts = yaml.safe_load(f)
+        
+        # Define supported languages
+        self.supported_languages = [
+            "en",  # English
+            "es",  # Spanish
+            "pt",  # Portuguese
+            "ko",  # Korean
+            "ja",  # Japanese
+            "id",  # Indonesian
+            "fr",  # French
+            "de",  # German
+            "zh"   # Chinese
+        ]
     
-    def create_conversation(self, character_id: int, user_id: int, language: str = "EN") -> Conversation:
+    def create_conversation(self, character_id: int, user_id: int, language: str = "en") -> Conversation:
         """
         Create a new conversation with initial greeting messages
         """
@@ -29,15 +46,37 @@ class ConversationService:
         character = self.character_repository.get_by_id(character_id)
         if not character:
             raise ValueError("Character not found")
-            
-        # Get system prompt template
-        prompt_key = f"CONVERSATION_SYSTEM_PROMPT_{language.upper()}"
-        system_prompt = self.prompts.get(prompt_key, self.prompts["CONVERSATION_SYSTEM_PROMPT_EN"])
         
-        # Insert character description into system prompt
-        system_prompt = system_prompt.format(
-            character_description=character.character_description
-        )
+        # Normalize language code
+        language = language.lower().strip()
+        # Extract primary language code if it's in format like 'en-US'
+        if '-' in language:
+            language = language.split('-')[0]
+        
+        # Get system prompt template based on language
+        logger.info(f"Creating conversation with language: {language}")
+        
+        if language in self.supported_languages:
+            prompt_key = f"CONVERSATION_SYSTEM_PROMPT_{language.upper()}"
+            system_prompt = self.prompts.get(prompt_key)
+            
+            # If prompt exists for this language, use it
+            if system_prompt:
+                logger.info(f"Using specific prompt for language: {language}")
+                system_prompt = system_prompt.format(character_description=character.character_description)
+            else:
+                # This shouldn't happen if the YAML is properly configured
+                logger.warning(f"Prompt key {prompt_key} not found despite language being supported")
+                system_prompt = self.prompts["CONVERSATION_SYSTEM_PROMPT_EN"].format(
+                    character_description=character.character_description
+                )
+        else:
+            # Fallback for unsupported languages
+            logger.info(f"Using fallback prompt for unsupported language: {language}")
+            system_prompt = self.prompts["CONVERSATION_SYSTEM_PROMPT_REST"].format(
+                character_description=character.character_description, 
+                language=language
+            )
         
         # Create conversation
         conversation = self.repository.create({
@@ -47,7 +86,7 @@ class ConversationService:
         })
         
         # Add initial user greeting (needed for LLM context)
-        user_content = f"Hello {character.name}"
+        user_content = f"{character.name}!"
         user_message = self.repository.add_message(
             conversation_id=conversation.id,
             role="user",
