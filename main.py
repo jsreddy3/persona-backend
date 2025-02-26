@@ -8,7 +8,8 @@ from routes import (
     character_routes,
     conversation_routes,
     payment_routes,
-    token_routes
+    token_routes,
+    admin_routes
 )
 from database.init_db import init_db
 import logging
@@ -30,7 +31,9 @@ app.add_middleware(
         "https://backend-persona-da6c29e3bf72.herokuapp.com",
         "https://frontend-persona-nine.vercel.app",
         "http://penpals.cloud",
-        "https://penpals.cloud"
+        "https://penpals.cloud",
+        "http://localhost:3001",  # Admin dashboard local
+        "https://admin.penpals.cloud"  # Admin dashboard production
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
@@ -62,6 +65,7 @@ app.include_router(character_routes.router, prefix=f"{api_prefix}/characters", t
 app.include_router(conversation_routes.router, prefix=f"{api_prefix}/conversations", tags=["conversations"])
 app.include_router(payment_routes.router, prefix=f"{api_prefix}/payments", tags=["payments"])
 app.include_router(token_routes.router, prefix=f"{api_prefix}/tokens", tags=["tokens"])
+app.include_router(admin_routes.router, prefix=f"{api_prefix}/admin", tags=["admin"])
 
 # Print all registered routes for debugging
 for route in app.routes:

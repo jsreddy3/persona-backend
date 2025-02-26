@@ -168,3 +168,29 @@ async def get_current_user(
             detail="Invalid credentials",
             headers={"WWW-Authenticate": "Bearer"}
         )
+
+# Admin API key for direct access without session token
+ADMIN_API_KEY = "admin-persona-api-key-2024"  # This should be stored securely in environment variables
+
+async def get_admin_access(
+    request: Request,
+    db: Session = Depends(get_db)
+) -> bool:
+    """
+    Authenticate admin access using API key
+    This bypasses the session token requirement for admin endpoints
+    """
+    logger.info("Checking admin API key")
+    
+    # Check for API key in headers
+    api_key = request.headers.get('X-Admin-API-Key')
+    if not api_key or api_key != ADMIN_API_KEY:
+        logger.warning("Invalid or missing admin API key")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing admin API key",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    
+    logger.info("Admin API key validated successfully")
+    return True
