@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Dict, Optional, List
 from sqlalchemy.orm import Session
 from functools import wraps
+import inspect
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -206,62 +207,133 @@ class TimingService:
 # Decorators for easy timing
 def time_db_operation(func):
     """Decorator to time database operations"""
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        from fastapi import Request
-        
-        # Try to get request from args or kwargs
-        request = next((arg for arg in args if isinstance(arg, Request)), kwargs.get('request'))
-        
-        start_time = time.time()
-        result = await func(*args, **kwargs)
-        db_time = time.time() - start_time
-        
-        # Update request timing if available
-        if request and hasattr(request.state, 'timing'):
-            request.state.timing.add_db_time(db_time)
-        
-        return result
-    return wrapper
+    if inspect.iscoroutinefunction(func):
+        @wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            from fastapi import Request
+            
+            # Try to get request from args or kwargs
+            request = next((arg for arg in args if isinstance(arg, Request)), kwargs.get('request'))
+            
+            start_time = time.time()
+            result = await func(*args, **kwargs)
+            db_time = time.time() - start_time
+            
+            # Update request timing if available
+            if request and hasattr(request.state, 'timing'):
+                request.state.timing.add_db_time(db_time)
+            else:
+                # Log but continue if no request or timing available
+                logger.debug(f"DB operation timed: {func.__name__} took {db_time:.4f}s (no request context)")
+            
+            return result
+        return async_wrapper
+    else:
+        @wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            from fastapi import Request
+            
+            # Try to get request from args or kwargs
+            request = next((arg for arg in args if isinstance(arg, Request)), kwargs.get('request'))
+            
+            start_time = time.time()
+            result = func(*args, **kwargs)
+            db_time = time.time() - start_time
+            
+            # Update request timing if available
+            if request and hasattr(request.state, 'timing'):
+                request.state.timing.add_db_time(db_time)
+            else:
+                # Log but continue if no request or timing available
+                logger.debug(f"DB operation timed: {func.__name__} took {db_time:.4f}s (no request context)")
+            
+            return result
+        return sync_wrapper
 
 def time_llm_operation(func):
     """Decorator to time LLM operations"""
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        from fastapi import Request
-        
-        # Try to get request from args or kwargs
-        request = next((arg for arg in args if isinstance(arg, Request)), kwargs.get('request'))
-        
-        # Mark LLM start
-        if request and hasattr(request.state, 'timing'):
-            request.state.timing.start_llm()
-        
-        result = await func(*args, **kwargs)
-        
-        # Mark LLM end
-        if request and hasattr(request.state, 'timing'):
-            request.state.timing.end_llm()
-        
-        return result
-    return wrapper
+    if inspect.iscoroutinefunction(func):
+        @wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            from fastapi import Request
+            
+            # Try to get request from args or kwargs
+            request = next((arg for arg in args if isinstance(arg, Request)), kwargs.get('request'))
+            
+            # Mark LLM start
+            if request and hasattr(request.state, 'timing'):
+                request.state.timing.start_llm()
+            
+            result = await func(*args, **kwargs)
+            
+            # Mark LLM end
+            if request and hasattr(request.state, 'timing'):
+                request.state.timing.end_llm()
+            
+            return result
+        return async_wrapper
+    else:
+        @wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            from fastapi import Request
+            
+            # Try to get request from args or kwargs
+            request = next((arg for arg in args if isinstance(arg, Request)), kwargs.get('request'))
+            
+            # Mark LLM start
+            if request and hasattr(request.state, 'timing'):
+                request.state.timing.start_llm()
+            
+            result = func(*args, **kwargs)
+            
+            # Mark LLM end
+            if request and hasattr(request.state, 'timing'):
+                request.state.timing.end_llm()
+            
+            return result
+        return sync_wrapper
 
 def time_network_operation(func):
     """Decorator to time network operations"""
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        from fastapi import Request
-        
-        # Try to get request from args or kwargs
-        request = next((arg for arg in args if isinstance(arg, Request)), kwargs.get('request'))
-        
-        start_time = time.time()
-        result = await func(*args, **kwargs)
-        network_time = time.time() - start_time
-        
-        # Update request timing if available
-        if request and hasattr(request.state, 'timing'):
-            request.state.timing.add_network_time(network_time)
-        
-        return result
-    return wrapper 
+    if inspect.iscoroutinefunction(func):
+        @wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            from fastapi import Request
+            
+            # Try to get request from args or kwargs
+            request = next((arg for arg in args if isinstance(arg, Request)), kwargs.get('request'))
+            
+            start_time = time.time()
+            result = await func(*args, **kwargs)
+            network_time = time.time() - start_time
+            
+            # Update request timing if available
+            if request and hasattr(request.state, 'timing'):
+                request.state.timing.add_network_time(network_time)
+            else:
+                # Log but continue if no request or timing available
+                logger.debug(f"Network operation timed: {func.__name__} took {network_time:.4f}s (no request context)")
+            
+            return result
+        return async_wrapper
+    else:
+        @wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            from fastapi import Request
+            
+            # Try to get request from args or kwargs
+            request = next((arg for arg in args if isinstance(arg, Request)), kwargs.get('request'))
+            
+            start_time = time.time()
+            result = func(*args, **kwargs)
+            network_time = time.time() - start_time
+            
+            # Update request timing if available
+            if request and hasattr(request.state, 'timing'):
+                request.state.timing.add_network_time(network_time)
+            else:
+                # Log but continue if no request or timing available
+                logger.debug(f"Network operation timed: {func.__name__} took {network_time:.4f}s (no request context)")
+            
+            return result
+        return sync_wrapper 

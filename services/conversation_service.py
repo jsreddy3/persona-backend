@@ -250,7 +250,12 @@ class ConversationService:
         return self.repository.get_by_participant(user_id)
     
     @time_db_operation
-    def get_conversations_with_characters(self, user_id: int):
+    def get_conversations_with_characters(self, user_id: int) -> List:
         """Get all conversations for a user with character details included"""
         conversations = self.repository.get_by_user_id_with_characters(user_id)
+        # Ensure we're always returning a list even if the repository returns None or a single item
+        if conversations is None:
+            return []
+        if not isinstance(conversations, list):
+            return [conversations]
         return conversations
