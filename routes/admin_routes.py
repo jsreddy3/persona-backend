@@ -58,6 +58,24 @@ class AdminConversationResponse(BaseModel):
     created_at: datetime
     last_message_at: Optional[datetime]
 
+class AdminMessageResponse(BaseModel):
+    id: int
+    role: str
+    content: str
+    created_at: datetime
+    
+class AdminConversationDetailResponse(BaseModel):
+    id: int
+    character_id: int
+    character_name: str
+    character_photo: Optional[str]
+    user_id: int
+    user_name: Optional[str]
+    message_count: int
+    created_at: datetime
+    last_message_at: Optional[datetime]
+    messages: List[AdminMessageResponse]
+
 class DashboardStats(BaseModel):
     totalUsers: int
     activeConversations: int
@@ -545,6 +563,71 @@ async def get_conversations(
     except Exception as e:
         logger.error(f"Error getting conversations: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get conversations: {str(e)}")
+
+@router.get("/conversations/{conversation_id}", response_model=AdminConversationDetailResponse)
+async def get_conversation_detail(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    is_admin: bool = Depends(get_admin_access)
+):
+    """Get detailed information about a specific conversation including messages"""
+    try:
+        # Get conversation details
+        conv_query = db.query(
+            Conversation,
+            Character.name.label("character_name"),
+            Character.photo_url.label("character_photo"),
+            User.username.label("user_name"),
+            func.count(Message.id).label("message_count"),
+            func.max(Message.created_at).label("last_message_at")
+        ).join(
+            Character, Character.id == Conversation.character_id
+        ).join(
+            User, User.id == Conversation.creator_id
+        ).outerjoin(
+            Message, Message.conversation_id == Conversation.id
+        ).filter(
+            Conversation.id == conversation_id
+        ).group_by(
+            Conversation.id, Character.name, Character.photo_url, User.username
+        ).first()
+        
+        if not conv_query:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        # Get all messages for this conversation
+        messages = db.query(Message).filter(
+            Message.conversation_id == conversation_id
+        ).order_by(Message.created_at).all()
+        
+        # Format messages
+        message_responses = [
+            AdminMessageResponse(
+                id=msg.id,
+                role=msg.role,
+                content=msg.content,
+                created_at=msg.created_at
+            ) for msg in messages
+        ]
+        
+        # Return conversation with messages
+        return AdminConversationDetailResponse(
+            id=conv_query.Conversation.id,
+            character_id=conv_query.Conversation.character_id,
+            character_name=conv_query.character_name,
+            character_photo=conv_query.character_photo,
+            user_id=conv_query.Conversation.creator_id,
+            user_name=conv_query.user_name,
+            message_count=conv_query.message_count,
+            created_at=conv_query.Conversation.created_at,
+            last_message_at=conv_query.last_message_at,
+            messages=message_responses
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting conversation detail: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get conversation detail: {str(e)}")
 
 # --- Helper Functions ---
 
