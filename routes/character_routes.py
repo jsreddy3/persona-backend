@@ -229,7 +229,7 @@ async def create_character(
         try:
             from services.conversation_service import ConversationService
             conv_service = ConversationService(db)
-            conv_service.create_conversation(
+            await conv_service.create_conversation(
                 character_id=new_character.id,
                 user_id=current_user.id
             )
