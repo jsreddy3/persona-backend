@@ -247,16 +247,18 @@ async def create_character(
 @router.get("/list/popular", response_model=List[CharacterResponse])
 async def get_popular_characters(
     request: Request,
+    page: int = 1,
+    per_page: int = 10,
     language: str = '',
     db: Session = Depends(get_db)
 ):
-    """Get list of popular characters"""
+    """Get list of popular characters with pagination"""
     try:
         service = CharacterService(db)
         # Get language from request header
         language = request.headers.get("accept-language", "en").split(",")[0].split("-")[0].lower()
-        logger.info(f"Getting popular characters for language: {language}")
-        return service.get_popular_characters(language=language)
+        logger.info(f"Getting popular characters for language: {language}, page: {page}, per_page: {per_page}")
+        return service.get_popular_characters(language=language, page=page, per_page=per_page)
     except Exception as e:
         logger.error(f"Error getting popular characters: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
