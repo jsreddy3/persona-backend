@@ -85,6 +85,11 @@ class DashboardStats(BaseModel):
     conversationGrowth: float
     characterGrowth: float
     creditGrowth: float
+    # Additional stats for detailed view
+    newMessages: Optional[int] = None
+    avgMessagesPerConversation: Optional[float] = None
+    activeUsers: Optional[int] = None
+    completionRate: Optional[float] = None
 
 class ActivityItem(BaseModel):
     id: str
@@ -98,6 +103,19 @@ class HealthItem(BaseModel):
     status: str
     latency: float
     message: str
+
+class UserStats(BaseModel):
+    totalUsers: int
+    activeUsers24h: int
+    newUsers7d: int
+
+class UserHistoricalData(BaseModel):
+    dates: List[str]
+    totalUsers: List[int]
+    activeUsers: List[int]
+    newUsers: List[int]
+    retentionRate: List[float]
+    activityDistribution: Dict[str, int]
 
 # --- Admin Authentication ---
 
@@ -145,33 +163,68 @@ async def get_dashboard_stats(
             Payment.status == "confirmed"
         ).scalar() or 0
         
-        # Get counts from 30 days ago for growth calculation
-        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+        # Get counts from 24 hours ago for growth calculation
+        one_day_ago = datetime.utcnow() - timedelta(days=1)
         
-        users_30d_ago = db.query(func.count(User.id)).filter(
-            User.created_at <= thirty_days_ago
+        # Users created in the last 24 hours
+        users_24h = db.query(func.count(User.id)).filter(
+            User.created_at >= one_day_ago
         ).scalar()
         
-        conversations_30d_ago = db.query(func.count(Conversation.id)).filter(
-            Conversation.created_at <= thirty_days_ago
+        # Active conversations in the last 24 hours (already calculated above)
+        
+        # Characters created in the last 24 hours
+        characters_24h = db.query(func.count(Character.id)).filter(
+            Character.created_at >= one_day_ago
         ).scalar()
         
-        characters_30d_ago = db.query(func.count(Character.id)).filter(
-            Character.created_at <= thirty_days_ago
-        ).scalar()
-        
-        credits_30d_ago = db.query(func.sum(Payment.amount)).filter(
+        # Credits purchased in the last 24 hours
+        credits_24h = db.query(func.sum(Payment.amount)).filter(
             and_(
                 Payment.status == "confirmed",
-                Payment.created_at <= thirty_days_ago
+                Payment.created_at >= one_day_ago
             )
         ).scalar() or 0
         
-        # Calculate growth percentages
-        user_growth = calculate_growth(users_30d_ago, total_users)
-        conversation_growth = calculate_growth(conversations_30d_ago, active_conversations)
-        character_growth = calculate_growth(characters_30d_ago, total_characters)
-        credit_growth = calculate_growth(credits_30d_ago, total_credits)
+        # Calculate growth percentages based on 24-hour contribution
+        # For a new app, we'll show the percentage of total that was added in the last 24h
+        user_growth = calculate_24h_growth(users_24h, total_users)
+        conversation_growth = 100.0  # All active conversations are by definition from last 24h
+        character_growth = calculate_24h_growth(characters_24h, total_characters)
+        credit_growth = calculate_24h_growth(credits_24h, total_credits)
+        
+        # Additional detailed stats
+        
+        # New messages in the last 24 hours
+        new_messages = db.query(func.count(Message.id)).filter(
+            Message.created_at >= one_day_ago
+        ).scalar() or 0
+        
+        # Get average messages per conversation by first calculating per conversation
+        conversation_message_counts = db.query(
+            Message.conversation_id,
+            func.count(Message.id).label('message_count')
+        ).group_by(Message.conversation_id).all()
+        
+        if conversation_message_counts:
+            avg_messages = sum(count for _, count in conversation_message_counts) / len(conversation_message_counts)
+        else:
+            avg_messages = 0
+        
+        # Active users in the last 24 hours (users who sent at least one message)
+        active_users = db.query(func.count(func.distinct(Conversation.creator_id))).filter(
+            Conversation.updated_at >= one_day_ago
+        ).scalar() or 0
+        
+        # Completion rate (percentage of conversations with at least 3 messages)
+        total_convs = db.query(func.count(Conversation.id)).scalar() or 1  # Avoid division by zero
+        completed_convs = db.query(func.count(Conversation.id)).filter(
+            db.query(func.count(Message.id))
+            .filter(Message.conversation_id == Conversation.id)
+            .correlate(Conversation)
+            .as_scalar() >= 3
+        ).scalar() or 0
+        completion_rate = (completed_convs / total_convs) * 100
         
         return DashboardStats(
             totalUsers=total_users,
@@ -181,7 +234,12 @@ async def get_dashboard_stats(
             userGrowth=user_growth,
             conversationGrowth=conversation_growth,
             characterGrowth=character_growth,
-            creditGrowth=credit_growth
+            creditGrowth=credit_growth,
+            # Additional detailed stats
+            newMessages=new_messages,
+            avgMessagesPerConversation=round(avg_messages, 1),
+            activeUsers=active_users,
+            completionRate=round(completion_rate, 1),
         )
     except Exception as e:
         logger.error(f"Error getting dashboard stats: {str(e)}")
@@ -346,6 +404,179 @@ async def get_system_health(
             )
         ]
 
+@router.get("/analytics/user-stats", response_model=UserStats)
+async def get_user_stats(
+    db: Session = Depends(get_db),
+    is_admin: bool = Depends(get_admin_access)
+):
+    """Get user statistics for the admin panel"""
+    try:
+        # Calculate time thresholds
+        now = datetime.utcnow()
+        one_day_ago = now - timedelta(days=1)
+        seven_days_ago = now - timedelta(days=7)
+        
+        # Get total users count
+        total_users = db.query(func.count(User.id)).scalar()
+        
+        # Get active users in the last 24 hours
+        active_users_24h = db.query(func.count(func.distinct(User.id))).filter(
+            User.last_active >= one_day_ago
+        ).scalar()
+        
+        # Get new users in the last 7 days
+        new_users_7d = db.query(func.count(User.id)).filter(
+            User.created_at >= seven_days_ago
+        ).scalar()
+        
+        return UserStats(
+            totalUsers=total_users,
+            activeUsers24h=active_users_24h,
+            newUsers7d=new_users_7d
+        )
+    except Exception as e:
+        logger.error(f"Error getting user stats: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get user stats: {str(e)}")
+
+@router.get("/analytics/user-historical", response_model=UserHistoricalData)
+async def get_user_historical_data(
+    days: int = Query(30, ge=1, le=90),  # Default to 30 days, min 1, max 90
+    db: Session = Depends(get_db),
+    is_admin: bool = Depends(get_admin_access)
+):
+    """Get historical user data for charts and visualizations"""
+    try:
+        # Calculate date range
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
+        
+        # For short time ranges (1-3 days), provide more granular data
+        use_hourly_data = days <= 3
+        
+        # Initialize result containers
+        dates = []
+        total_users = []
+        active_users = []
+        new_users = []
+        retention_rates = []
+        
+        # Generate data for each day in the range
+        current_date = start_date
+        
+        # Time increment depends on the range
+        if use_hourly_data:
+            # For 1-3 days, provide hourly data points
+            increment = timedelta(hours=4)  # Every 4 hours
+        else:
+            # For longer ranges, use daily data points
+            increment = timedelta(days=1)
+        
+        while current_date <= end_date:
+            next_date = current_date + increment
+            
+            # Format date string based on granularity
+            if use_hourly_data:
+                date_str = current_date.strftime("%Y-%m-%d %H:%M")
+            else:
+                date_str = current_date.strftime("%Y-%m-%d")
+                
+            dates.append(date_str)
+            
+            # Total users up to this date
+            total = db.query(func.count(User.id)).filter(
+                User.created_at < next_date
+            ).scalar() or 0
+            total_users.append(total)
+            
+            # Active users in this time period
+            active = db.query(func.count(func.distinct(User.id))).filter(
+                User.last_active >= current_date,
+                User.last_active < next_date
+            ).scalar() or 0
+            active_users.append(active)
+            
+            # New users in this time period
+            new = db.query(func.count(User.id)).filter(
+                User.created_at >= current_date,
+                User.created_at < next_date
+            ).scalar() or 0
+            new_users.append(new)
+            
+            # Retention rate calculation - using a more standard definition:
+            # For each date point, find users who were active in the previous period
+            # and calculate what percentage of them returned in the current period
+            
+            # Define the previous period based on our increment
+            previous_period_start = current_date - increment
+            previous_period_end = current_date
+            
+            # Find users who were active in the previous period
+            active_users_previous_period = db.query(func.count(func.distinct(User.id))).filter(
+                User.last_active >= previous_period_start,
+                User.last_active < previous_period_end,
+                User.created_at < previous_period_end  # Only include users who existed in the previous period
+            ).scalar() or 1  # Avoid division by zero
+            
+            # Find how many of those same users were also active in the current period
+            returning_users = db.query(func.count(func.distinct(User.id))).filter(
+                User.last_active >= current_date,
+                User.last_active < next_date,
+                User.last_active >= previous_period_start,  # They were active in the previous period
+                User.last_active < previous_period_end
+            ).scalar() or 0
+            
+            # Calculate retention rate as the percentage of users from the previous period who returned
+            retention = (returning_users / active_users_previous_period) * 100 if active_users_previous_period > 0 else 0
+            retention_rates.append(round(min(retention, 100.0), 2))  # Cap at 100% to avoid impossible values
+            
+            current_date = next_date
+        
+        # Get message counts per user
+        message_counts = db.query(
+            User.id,
+            func.count(Message.id).label("message_count")
+        ).outerjoin(
+            Conversation, Conversation.creator_id == User.id
+        ).outerjoin(
+            Message, Message.conversation_id == Conversation.id
+        ).group_by(User.id).all()
+        
+        # Categorize users by activity level
+        activity_buckets = {
+            "0 messages": 0,
+            "1-5 messages": 0,
+            "6-20 messages": 0,
+            "21-50 messages": 0,
+            "51-100 messages": 0,
+            "101+ messages": 0
+        }
+        
+        for _, count in message_counts:
+            if count == 0:
+                activity_buckets["0 messages"] += 1
+            elif count <= 5:
+                activity_buckets["1-5 messages"] += 1
+            elif count <= 20:
+                activity_buckets["6-20 messages"] += 1
+            elif count <= 50:
+                activity_buckets["21-50 messages"] += 1
+            elif count <= 100:
+                activity_buckets["51-100 messages"] += 1
+            else:
+                activity_buckets["101+ messages"] += 1
+        
+        return UserHistoricalData(
+            dates=dates,
+            totalUsers=total_users,
+            activeUsers=active_users,
+            newUsers=new_users,
+            retentionRate=retention_rates,
+            activityDistribution=activity_buckets
+        )
+    except Exception as e:
+        logger.error(f"Error getting user historical data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get user historical data: {str(e)}")
+
 # --- User Management Endpoints ---
 
 @router.get("/users", response_model=Dict[str, Any])
@@ -360,29 +591,165 @@ async def get_users(
 ):
     """Get all users with pagination, optional search, and sorting"""
     try:
-        query = db.query(User)
+        # Validate sort direction
+        if sort_dir not in ["asc", "desc"]:
+            sort_dir = "desc"  # Default to descending if invalid
         
-        # Apply search filter if provided
-        if search:
-            search_term = f"%{search}%"
-            query = query.filter(
-                or_(
-                    User.username.ilike(search_term),
-                    User.email.ilike(search_term),
-                    User.world_id.ilike(search_term)
-                )
-            )
-        
-        # Calculate total for pagination
-        total = query.count()
-        
-        # Apply sorting based on parameters
-        if sort_by and sort_dir:
-            # Validate sort direction
-            if sort_dir not in ["asc", "desc"]:
-                sort_dir = "desc"  # Default to descending if invalid
+        # Handle special sorting cases for derived fields
+        if sort_by in ["character_count", "conversation_count", "message_count"]:
+            # For these fields, we need to join with the appropriate tables and apply sorting at the database level
             
-            # Apply sorting based on field
+            # Base query with user information
+            if sort_by == "character_count":
+                # Count characters and join with users
+                query = db.query(
+                    User,
+                    func.count(Character.id).label("character_count")
+                ).outerjoin(
+                    Character, Character.creator_id == User.id
+                ).group_by(User.id)
+                
+                # Apply search filter if provided
+                if search:
+                    search_term = f"%{search}%"
+                    query = query.filter(
+                        or_(
+                            User.username.ilike(search_term),
+                            User.email.ilike(search_term),
+                            User.world_id.ilike(search_term)
+                        )
+                    )
+                
+                # Apply sorting
+                query = query.order_by(desc("character_count") if sort_dir == "desc" else "character_count")
+                
+            elif sort_by == "conversation_count":
+                # Count conversations and join with users
+                query = db.query(
+                    User,
+                    func.count(Conversation.id).label("conversation_count")
+                ).outerjoin(
+                    Conversation, Conversation.creator_id == User.id
+                ).group_by(User.id)
+                
+                # Apply search filter if provided
+                if search:
+                    search_term = f"%{search}%"
+                    query = query.filter(
+                        or_(
+                            User.username.ilike(search_term),
+                            User.email.ilike(search_term),
+                            User.world_id.ilike(search_term)
+                        )
+                    )
+                
+                # Apply sorting
+                query = query.order_by(desc("conversation_count") if sort_dir == "desc" else "conversation_count")
+                
+            elif sort_by == "message_count":
+                # Count messages through conversations and join with users
+                query = db.query(
+                    User,
+                    func.count(Message.id).label("message_count")
+                ).outerjoin(
+                    Conversation, Conversation.creator_id == User.id
+                ).outerjoin(
+                    Message, Message.conversation_id == Conversation.id
+                ).group_by(User.id)
+                
+                # Apply search filter if provided
+                if search:
+                    search_term = f"%{search}%"
+                    query = query.filter(
+                        or_(
+                            User.username.ilike(search_term),
+                            User.email.ilike(search_term),
+                            User.world_id.ilike(search_term)
+                        )
+                    )
+                
+                # Apply sorting
+                query = query.order_by(desc("message_count") if sort_dir == "desc" else "message_count")
+            
+            # Calculate total for pagination
+            total = query.count()
+            
+            # Apply pagination
+            query_results = query.offset((page - 1) * limit).limit(limit).all()
+            
+            # Process results
+            result = []
+            for query_result in query_results:
+                user = query_result[0]  # The User object
+                
+                # Get the count that was used for sorting
+                primary_count = query_result[1]
+                
+                # Get the other counts that weren't used for sorting
+                if sort_by == "character_count":
+                    character_count = primary_count
+                    conversation_count = db.query(func.count(Conversation.id)).filter(
+                        Conversation.creator_id == user.id
+                    ).scalar()
+                    message_count = db.query(func.count(Message.id)).join(
+                        Conversation, Conversation.id == Message.conversation_id
+                    ).filter(
+                        Conversation.creator_id == user.id
+                    ).scalar()
+                elif sort_by == "conversation_count":
+                    character_count = db.query(func.count(Character.id)).filter(
+                        Character.creator_id == user.id
+                    ).scalar()
+                    conversation_count = primary_count
+                    message_count = db.query(func.count(Message.id)).join(
+                        Conversation, Conversation.id == Message.conversation_id
+                    ).filter(
+                        Conversation.creator_id == user.id
+                    ).scalar()
+                else:  # message_count
+                    character_count = db.query(func.count(Character.id)).filter(
+                        Character.creator_id == user.id
+                    ).scalar()
+                    conversation_count = db.query(func.count(Conversation.id)).filter(
+                        Conversation.creator_id == user.id
+                    ).scalar()
+                    message_count = primary_count
+                
+                user_data = AdminUserResponse(
+                    id=user.id,
+                    world_id=user.world_id,
+                    username=user.username,
+                    email=user.email,
+                    language=user.language,
+                    credits=user.credits,
+                    wallet_address=user.wallet_address,
+                    created_at=user.created_at,
+                    last_active=user.last_active,
+                    credits_spent=user.credits_spent,
+                    character_count=character_count,
+                    conversation_count=conversation_count,
+                    message_count=message_count
+                )
+                result.append(user_data)
+        else:
+            # Standard query for directly sortable fields
+            query = db.query(User)
+            
+            # Apply search filter if provided
+            if search:
+                search_term = f"%{search}%"
+                query = query.filter(
+                    or_(
+                        User.username.ilike(search_term),
+                        User.email.ilike(search_term),
+                        User.world_id.ilike(search_term)
+                    )
+                )
+            
+            # Calculate total for pagination
+            total = query.count()
+            
+            # Apply sorting based on parameters
             if sort_by == "id":
                 query = query.order_by(desc(User.id) if sort_dir == "desc" else User.id)
             elif sort_by == "username":
@@ -396,55 +763,46 @@ async def get_users(
             else:
                 # Default to created_at if sort field is not directly available
                 query = query.order_by(desc(User.created_at) if sort_dir == "desc" else User.created_at)
-        else:
-            # Default sorting by created_at descending
-            query = query.order_by(desc(User.created_at))
-        
-        # Apply pagination
-        users = query.offset((page - 1) * limit).limit(limit).all()
-        
-        # Enhance user data with additional information
-        result = []
-        for user in users:
-            # Get character count
-            character_count = db.query(func.count(Character.id)).filter(
-                Character.creator_id == user.id
-            ).scalar()
             
-            # Get conversation count
-            conversation_count = db.query(func.count(Conversation.id)).filter(
-                Conversation.creator_id == user.id
-            ).scalar()
+            # Apply pagination
+            users = query.offset((page - 1) * limit).limit(limit).all()
             
-            # Get message count
-            message_count = db.query(func.count(Message.id)).join(
-                Conversation, Conversation.id == Message.conversation_id
-            ).filter(
-                Conversation.creator_id == user.id
-            ).scalar()
-            
-            user_data = AdminUserResponse(
-                id=user.id,
-                world_id=user.world_id,
-                username=user.username,
-                email=user.email,
-                language=user.language,
-                credits=user.credits,
-                wallet_address=user.wallet_address,
-                created_at=user.created_at,
-                last_active=user.last_active,
-                credits_spent=user.credits_spent,
-                character_count=character_count,
-                conversation_count=conversation_count,
-                message_count=message_count
-            )
-            result.append(user_data)
-        
-        # For fields that require post-query sorting (like character_count, conversation_count, message_count)
-        if sort_by in ["character_count", "conversation_count", "message_count"]:
-            # Sort the result list after all data is collected
-            reverse = sort_dir == "desc"
-            result.sort(key=lambda x: getattr(x, sort_by), reverse=reverse)
+            # Enhance user data with additional information
+            result = []
+            for user in users:
+                # Get character count
+                character_count = db.query(func.count(Character.id)).filter(
+                    Character.creator_id == user.id
+                ).scalar()
+                
+                # Get conversation count
+                conversation_count = db.query(func.count(Conversation.id)).filter(
+                    Conversation.creator_id == user.id
+                ).scalar()
+                
+                # Get message count
+                message_count = db.query(func.count(Message.id)).join(
+                    Conversation, Conversation.id == Message.conversation_id
+                ).filter(
+                    Conversation.creator_id == user.id
+                ).scalar()
+                
+                user_data = AdminUserResponse(
+                    id=user.id,
+                    world_id=user.world_id,
+                    username=user.username,
+                    email=user.email,
+                    language=user.language,
+                    credits=user.credits,
+                    wallet_address=user.wallet_address,
+                    created_at=user.created_at,
+                    last_active=user.last_active,
+                    credits_spent=user.credits_spent,
+                    character_count=character_count,
+                    conversation_count=conversation_count,
+                    message_count=message_count
+                )
+                result.append(user_data)
         
         # Return with pagination metadata
         return {
@@ -869,10 +1227,10 @@ async def get_conversation_detail(
 
 # --- Helper Functions ---
 
-def calculate_growth(old_value, new_value):
-    """Calculate growth percentage between two values"""
-    if old_value == 0:
-        return 100.0 if new_value > 0 else 0.0
+def calculate_24h_growth(last_24h_value, total_value):
+    """Calculate what percentage of the total was added in the last 24 hours"""
+    if total_value == 0:
+        return 0.0
     
-    growth = ((new_value - old_value) / old_value) * 100.0
-    return round(growth, 1) 
+    percentage = (last_24h_value / total_value) * 100.0
+    return round(percentage, 1) 
