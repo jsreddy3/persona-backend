@@ -1072,11 +1072,17 @@ async def get_characters(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     search: Optional[str] = None,
+    sort_by: Optional[str] = "created_at",
+    sort_dir: Optional[str] = "desc",
     db: Session = Depends(get_db),
     is_admin: bool = Depends(get_admin_access)
 ):
-    """Get all characters with pagination and optional search"""
+    """Get all characters with pagination, optional search, and sorting"""
     try:
+        # Validate sort direction
+        if sort_dir not in ["asc", "desc"]:
+            sort_dir = "desc"  # Default to descending if invalid
+            
         query = db.query(Character, User.username).join(
             User, User.id == Character.creator_id
         )
@@ -1095,8 +1101,25 @@ async def get_characters(
         # Calculate total for pagination
         total = query.count()
         
+        # Apply sorting based on parameters
+        if sort_by == "id":
+            query = query.order_by(desc(Character.id) if sort_dir == "desc" else Character.id)
+        elif sort_by == "name":
+            query = query.order_by(desc(Character.name) if sort_dir == "desc" else Character.name)
+        elif sort_by == "rating":
+            query = query.order_by(desc(Character.rating) if sort_dir == "desc" else Character.rating)
+        elif sort_by == "num_chats_created":
+            query = query.order_by(desc(Character.num_chats_created) if sort_dir == "desc" else Character.num_chats_created)
+        elif sort_by == "num_messages":
+            query = query.order_by(desc(Character.num_messages) if sort_dir == "desc" else Character.num_messages)
+        elif sort_by == "created_at":
+            query = query.order_by(desc(Character.created_at) if sort_dir == "desc" else Character.created_at)
+        else:
+            # Default to created_at if sort field is not directly available
+            query = query.order_by(desc(Character.created_at) if sort_dir == "desc" else Character.created_at)
+        
         # Apply pagination
-        characters = query.order_by(desc(Character.created_at)).offset((page - 1) * limit).limit(limit).all()
+        characters = query.offset((page - 1) * limit).limit(limit).all()
         
         # Format response
         result = []
