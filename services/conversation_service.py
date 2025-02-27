@@ -104,6 +104,9 @@ class ConversationService:
             content=character.greeting
         )
         
+        # Update character stats to increment the conversation count
+        self.character_repository.update_stats(character_id, increment_chats=True)
+        
         return conversation
     
     @time_db_operation
