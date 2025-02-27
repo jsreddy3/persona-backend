@@ -444,29 +444,165 @@ async def get_users(
 ):
     """Get all users with pagination, optional search, and sorting"""
     try:
-        query = db.query(User)
+        # Validate sort direction
+        if sort_dir not in ["asc", "desc"]:
+            sort_dir = "desc"  # Default to descending if invalid
         
-        # Apply search filter if provided
-        if search:
-            search_term = f"%{search}%"
-            query = query.filter(
-                or_(
-                    User.username.ilike(search_term),
-                    User.email.ilike(search_term),
-                    User.world_id.ilike(search_term)
-                )
-            )
-        
-        # Calculate total for pagination
-        total = query.count()
-        
-        # Apply sorting based on parameters
-        if sort_by and sort_dir:
-            # Validate sort direction
-            if sort_dir not in ["asc", "desc"]:
-                sort_dir = "desc"  # Default to descending if invalid
+        # Handle special sorting cases for derived fields
+        if sort_by in ["character_count", "conversation_count", "message_count"]:
+            # For these fields, we need to join with the appropriate tables and apply sorting at the database level
             
-            # Apply sorting based on field
+            # Base query with user information
+            if sort_by == "character_count":
+                # Count characters and join with users
+                query = db.query(
+                    User,
+                    func.count(Character.id).label("character_count")
+                ).outerjoin(
+                    Character, Character.creator_id == User.id
+                ).group_by(User.id)
+                
+                # Apply search filter if provided
+                if search:
+                    search_term = f"%{search}%"
+                    query = query.filter(
+                        or_(
+                            User.username.ilike(search_term),
+                            User.email.ilike(search_term),
+                            User.world_id.ilike(search_term)
+                        )
+                    )
+                
+                # Apply sorting
+                query = query.order_by(desc("character_count") if sort_dir == "desc" else "character_count")
+                
+            elif sort_by == "conversation_count":
+                # Count conversations and join with users
+                query = db.query(
+                    User,
+                    func.count(Conversation.id).label("conversation_count")
+                ).outerjoin(
+                    Conversation, Conversation.creator_id == User.id
+                ).group_by(User.id)
+                
+                # Apply search filter if provided
+                if search:
+                    search_term = f"%{search}%"
+                    query = query.filter(
+                        or_(
+                            User.username.ilike(search_term),
+                            User.email.ilike(search_term),
+                            User.world_id.ilike(search_term)
+                        )
+                    )
+                
+                # Apply sorting
+                query = query.order_by(desc("conversation_count") if sort_dir == "desc" else "conversation_count")
+                
+            elif sort_by == "message_count":
+                # Count messages through conversations and join with users
+                query = db.query(
+                    User,
+                    func.count(Message.id).label("message_count")
+                ).outerjoin(
+                    Conversation, Conversation.creator_id == User.id
+                ).outerjoin(
+                    Message, Message.conversation_id == Conversation.id
+                ).group_by(User.id)
+                
+                # Apply search filter if provided
+                if search:
+                    search_term = f"%{search}%"
+                    query = query.filter(
+                        or_(
+                            User.username.ilike(search_term),
+                            User.email.ilike(search_term),
+                            User.world_id.ilike(search_term)
+                        )
+                    )
+                
+                # Apply sorting
+                query = query.order_by(desc("message_count") if sort_dir == "desc" else "message_count")
+            
+            # Calculate total for pagination
+            total = query.count()
+            
+            # Apply pagination
+            query_results = query.offset((page - 1) * limit).limit(limit).all()
+            
+            # Process results
+            result = []
+            for query_result in query_results:
+                user = query_result[0]  # The User object
+                
+                # Get the count that was used for sorting
+                primary_count = query_result[1]
+                
+                # Get the other counts that weren't used for sorting
+                if sort_by == "character_count":
+                    character_count = primary_count
+                    conversation_count = db.query(func.count(Conversation.id)).filter(
+                        Conversation.creator_id == user.id
+                    ).scalar()
+                    message_count = db.query(func.count(Message.id)).join(
+                        Conversation, Conversation.id == Message.conversation_id
+                    ).filter(
+                        Conversation.creator_id == user.id
+                    ).scalar()
+                elif sort_by == "conversation_count":
+                    character_count = db.query(func.count(Character.id)).filter(
+                        Character.creator_id == user.id
+                    ).scalar()
+                    conversation_count = primary_count
+                    message_count = db.query(func.count(Message.id)).join(
+                        Conversation, Conversation.id == Message.conversation_id
+                    ).filter(
+                        Conversation.creator_id == user.id
+                    ).scalar()
+                else:  # message_count
+                    character_count = db.query(func.count(Character.id)).filter(
+                        Character.creator_id == user.id
+                    ).scalar()
+                    conversation_count = db.query(func.count(Conversation.id)).filter(
+                        Conversation.creator_id == user.id
+                    ).scalar()
+                    message_count = primary_count
+                
+                user_data = AdminUserResponse(
+                    id=user.id,
+                    world_id=user.world_id,
+                    username=user.username,
+                    email=user.email,
+                    language=user.language,
+                    credits=user.credits,
+                    wallet_address=user.wallet_address,
+                    created_at=user.created_at,
+                    last_active=user.last_active,
+                    credits_spent=user.credits_spent,
+                    character_count=character_count,
+                    conversation_count=conversation_count,
+                    message_count=message_count
+                )
+                result.append(user_data)
+        else:
+            # Standard query for directly sortable fields
+            query = db.query(User)
+            
+            # Apply search filter if provided
+            if search:
+                search_term = f"%{search}%"
+                query = query.filter(
+                    or_(
+                        User.username.ilike(search_term),
+                        User.email.ilike(search_term),
+                        User.world_id.ilike(search_term)
+                    )
+                )
+            
+            # Calculate total for pagination
+            total = query.count()
+            
+            # Apply sorting based on parameters
             if sort_by == "id":
                 query = query.order_by(desc(User.id) if sort_dir == "desc" else User.id)
             elif sort_by == "username":
@@ -480,55 +616,46 @@ async def get_users(
             else:
                 # Default to created_at if sort field is not directly available
                 query = query.order_by(desc(User.created_at) if sort_dir == "desc" else User.created_at)
-        else:
-            # Default sorting by created_at descending
-            query = query.order_by(desc(User.created_at))
-        
-        # Apply pagination
-        users = query.offset((page - 1) * limit).limit(limit).all()
-        
-        # Enhance user data with additional information
-        result = []
-        for user in users:
-            # Get character count
-            character_count = db.query(func.count(Character.id)).filter(
-                Character.creator_id == user.id
-            ).scalar()
             
-            # Get conversation count
-            conversation_count = db.query(func.count(Conversation.id)).filter(
-                Conversation.creator_id == user.id
-            ).scalar()
+            # Apply pagination
+            users = query.offset((page - 1) * limit).limit(limit).all()
             
-            # Get message count
-            message_count = db.query(func.count(Message.id)).join(
-                Conversation, Conversation.id == Message.conversation_id
-            ).filter(
-                Conversation.creator_id == user.id
-            ).scalar()
-            
-            user_data = AdminUserResponse(
-                id=user.id,
-                world_id=user.world_id,
-                username=user.username,
-                email=user.email,
-                language=user.language,
-                credits=user.credits,
-                wallet_address=user.wallet_address,
-                created_at=user.created_at,
-                last_active=user.last_active,
-                credits_spent=user.credits_spent,
-                character_count=character_count,
-                conversation_count=conversation_count,
-                message_count=message_count
-            )
-            result.append(user_data)
-        
-        # For fields that require post-query sorting (like character_count, conversation_count, message_count)
-        if sort_by in ["character_count", "conversation_count", "message_count"]:
-            # Sort the result list after all data is collected
-            reverse = sort_dir == "desc"
-            result.sort(key=lambda x: getattr(x, sort_by), reverse=reverse)
+            # Enhance user data with additional information
+            result = []
+            for user in users:
+                # Get character count
+                character_count = db.query(func.count(Character.id)).filter(
+                    Character.creator_id == user.id
+                ).scalar()
+                
+                # Get conversation count
+                conversation_count = db.query(func.count(Conversation.id)).filter(
+                    Conversation.creator_id == user.id
+                ).scalar()
+                
+                # Get message count
+                message_count = db.query(func.count(Message.id)).join(
+                    Conversation, Conversation.id == Message.conversation_id
+                ).filter(
+                    Conversation.creator_id == user.id
+                ).scalar()
+                
+                user_data = AdminUserResponse(
+                    id=user.id,
+                    world_id=user.world_id,
+                    username=user.username,
+                    email=user.email,
+                    language=user.language,
+                    credits=user.credits,
+                    wallet_address=user.wallet_address,
+                    created_at=user.created_at,
+                    last_active=user.last_active,
+                    credits_spent=user.credits_spent,
+                    character_count=character_count,
+                    conversation_count=conversation_count,
+                    message_count=message_count
+                )
+                result.append(user_data)
         
         # Return with pagination metadata
         return {
