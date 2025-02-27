@@ -104,6 +104,11 @@ class HealthItem(BaseModel):
     latency: float
     message: str
 
+class UserStats(BaseModel):
+    totalUsers: int
+    activeUsers24h: int
+    newUsers7d: int
+
 # --- Admin Authentication ---
 
 async def get_admin_user(
@@ -390,6 +395,40 @@ async def get_system_health(
                 message=f"Error: {str(e)}"
             )
         ]
+
+@router.get("/analytics/user-stats", response_model=UserStats)
+async def get_user_stats(
+    db: Session = Depends(get_db),
+    is_admin: bool = Depends(get_admin_access)
+):
+    """Get user statistics for the admin panel"""
+    try:
+        # Calculate time thresholds
+        now = datetime.utcnow()
+        one_day_ago = now - timedelta(days=1)
+        seven_days_ago = now - timedelta(days=7)
+        
+        # Get total users count
+        total_users = db.query(func.count(User.id)).scalar()
+        
+        # Get active users in the last 24 hours
+        active_users_24h = db.query(func.count(func.distinct(User.id))).filter(
+            User.last_active >= one_day_ago
+        ).scalar()
+        
+        # Get new users in the last 7 days
+        new_users_7d = db.query(func.count(User.id)).filter(
+            User.created_at >= seven_days_ago
+        ).scalar()
+        
+        return UserStats(
+            totalUsers=total_users,
+            activeUsers24h=active_users_24h,
+            newUsers7d=new_users_7d
+        )
+    except Exception as e:
+        logger.error(f"Error getting user stats: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get user stats: {str(e)}")
 
 # --- User Management Endpoints ---
 
