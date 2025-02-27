@@ -187,13 +187,16 @@ async def get_dashboard_stats(
             Message.created_at >= one_day_ago
         ).scalar() or 0
         
-        # Average messages per conversation
-        avg_messages = db.query(func.avg(
-            db.query(func.count(Message.id))
-            .filter(Message.conversation_id == Conversation.id)
-            .correlate(Conversation)
-            .as_scalar()
-        )).scalar() or 0
+        # Get average messages per conversation by first calculating per conversation
+        conversation_message_counts = db.query(
+            Message.conversation_id,
+            func.count(Message.id).label('message_count')
+        ).group_by(Message.conversation_id).all()
+        
+        if conversation_message_counts:
+            avg_messages = sum(count for _, count in conversation_message_counts) / len(conversation_message_counts)
+        else:
+            avg_messages = 0
         
         # Active users in the last 24 hours (users who sent at least one message)
         active_users = db.query(func.count(func.distinct(Conversation.creator_id))).filter(
