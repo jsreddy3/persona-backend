@@ -1154,6 +1154,110 @@ async def get_characters(
         logger.error(f"Error getting characters: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get characters: {str(e)}")
 
+@router.get("/characters/{character_id}", response_model=AdminCharacterResponse)
+async def get_character_by_id(
+    character_id: int,
+    db: Session = Depends(get_db),
+    is_admin: bool = Depends(get_admin_access)
+):
+    """Get a single character by ID with detailed information"""
+    try:
+        # Query character with creator username
+        result = db.query(Character, User.username).join(
+            User, User.id == Character.creator_id
+        ).filter(
+            Character.id == character_id
+        ).first()
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="Character not found")
+        
+        character, username = result
+        
+        # Check if language attribute exists, use default if not
+        language = getattr(character, 'language', 'en')
+        
+        return AdminCharacterResponse(
+            id=character.id,
+            name=character.name,
+            creator_id=character.creator_id,
+            creator_username=username,
+            character_description=character.character_description,
+            tagline=character.tagline,
+            photo_url=character.photo_url,
+            num_chats_created=character.num_chats_created,
+            num_messages=character.num_messages,
+            rating=character.rating,
+            created_at=character.created_at,
+            language=language
+        )
+    except Exception as e:
+        logger.error(f"Error getting character by ID: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get character: {str(e)}")
+
+class CharacterUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    tagline: Optional[str] = None
+    character_description: Optional[str] = None
+    language: Optional[str] = None
+
+@router.put("/characters/{character_id}", response_model=AdminCharacterResponse)
+async def update_character(
+    character_id: int,
+    character_data: CharacterUpdateRequest,
+    db: Session = Depends(get_db),
+    is_admin: bool = Depends(get_admin_access)
+):
+    """Update a character's information"""
+    try:
+        # First check if the character exists
+        character = db.query(Character).filter(Character.id == character_id).first()
+        
+        if not character:
+            raise HTTPException(status_code=404, detail="Character not found")
+        
+        # Update character fields if provided
+        if character_data.name is not None:
+            character.name = character_data.name
+        
+        if character_data.tagline is not None:
+            character.tagline = character_data.tagline
+        
+        if character_data.character_description is not None:
+            character.character_description = character_data.character_description
+        
+        if character_data.language is not None:
+            character.language = character_data.language
+        
+        # Save changes
+        db.commit()
+        db.refresh(character)
+        
+        # Get creator username for response
+        creator = db.query(User).filter(User.id == character.creator_id).first()
+        creator_username = creator.username if creator else None
+        
+        # Return updated character
+        return AdminCharacterResponse(
+            id=character.id,
+            name=character.name,
+            creator_id=character.creator_id,
+            creator_username=creator_username,
+            character_description=character.character_description,
+            tagline=character.tagline,
+            photo_url=character.photo_url,
+            num_chats_created=character.num_chats_created,
+            num_messages=character.num_messages,
+            rating=character.rating,
+            created_at=character.created_at,
+            language=character.language
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating character: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update character: {str(e)}")
+
 # --- Conversation Management Endpoints ---
 
 @router.get("/conversations", response_model=Dict[str, Any])
