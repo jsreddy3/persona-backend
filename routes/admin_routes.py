@@ -9,6 +9,11 @@ from database.database import get_db
 from database.models import User, Character, Conversation, Message, Payment, Session
 from dependencies.auth import get_current_user, create_session, get_admin_access
 from services.user_service import UserService
+from services.character_service import CharacterService
+from services.conversation_service import ConversationService
+from services.image_service import ImageService
+from services.image_generation_service import ImageGenerationService
+from routes.character_routes import CharacterCreate
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -122,6 +127,19 @@ class CharacterStats(BaseModel):
     activeConversations: int
     avgRating: float
     newCharacters7d: int
+
+class BatchCharacterCreate(BaseModel):
+    characters: List[CharacterCreate]
+    creator_id: Optional[int] = None  # Optional creator ID, defaults to admin user
+    generate_images: bool = True  # Whether to generate images for characters without photo_url
+    create_conversations: bool = True  # Whether to create initial conversations
+
+class BatchCharacterResponse(BaseModel):
+    successful: List[AdminCharacterResponse]
+    failed: List[Dict[str, Any]]
+    total: int
+    success_count: int
+    failure_count: int
 
 # --- Admin Authentication ---
 
@@ -1443,4 +1461,153 @@ def calculate_24h_growth(last_24h_value, total_value):
         return 0.0
     
     percentage = (last_24h_value / total_value) * 100.0
-    return round(percentage, 1) 
+    return round(percentage, 1)
+
+@router.post("/characters/batch", response_model=BatchCharacterResponse)
+async def create_characters_batch(
+    batch: BatchCharacterCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    is_admin: bool = Depends(get_admin_access)
+):
+    """Create multiple characters in a batch"""
+    successful = []
+    failed = []
+    
+    try:
+        # Get default creator if not specified
+        creator_id = batch.creator_id
+        if not creator_id:
+            # Use the first admin user as default creator
+            admin_user = db.query(User).filter(User.email.in_(["admin@persona.ai", "vivek.vajipey@gmail.com"])).first()
+            if admin_user:
+                creator_id = admin_user.id
+            else:
+                # Fallback to the first user in the database
+                first_user = db.query(User).first()
+                if first_user:
+                    creator_id = first_user.id
+                else:
+                    raise HTTPException(status_code=400, detail="No valid creator ID found and no users in database")
+        
+        # Get language from request header
+        language = request.headers.get("accept-language", "en").split(",")[0].split("-")[0].lower()
+        
+        # Default to English if language not supported
+        if language not in ["en", "es", "pt", "ko", "ja", "id", "fr", "de", "zh", "hi", "sw"]:
+            language = "en"
+        
+        # Create character service
+        service = CharacterService(db)
+        
+        # Process each character in the batch
+        for character_data in batch.characters:
+            try:
+                # Define attributes based on language
+                all_attributes = {
+                    "en": [
+                        "chaotic", "mischievous", "unpredictable", "sarcastic", 
+                        "provocative", "absurd", "irreverent", "rebellious", 
+                        "dramatic", "exaggerated", "bizarre", "outrageous", 
+                        "nonsensical", "contradictory", "inflammatory", "ridiculous", 
+                        "eccentric", "obnoxious", "confusing", "irritating", 
+                        "controversial", "unhinged", "deceptive", "bamboozling",
+                        "eye-rolling", "cringe-worthy", "face-palming", "mind-boggling",
+                        "rage-inducing", "insufferable"
+                    ],
+                    # Other languages omitted for brevity
+                }
+                
+                # Use provided attributes or randomly select from language-specific list
+                attributes = character_data.attributes
+                if not attributes and language in all_attributes:
+                    import random
+                    attributes = random.sample(all_attributes[language], 2)
+                
+                # Create character
+                new_character = service.create_character(
+                    name=character_data.name,
+                    character_description=character_data.character_description,
+                    greeting=character_data.greeting,
+                    tagline=character_data.tagline,
+                    photo_url=character_data.photo_url,
+                    creator_id=creator_id,
+                    attributes=attributes,
+                    language=language
+                )
+                
+                # Generate initial image if requested and none provided
+                if batch.generate_images and not new_character.photo_url:
+                    try:
+                        logger.info(f"Starting image generation for character {new_character.id}")
+                        # Create a prompt combining name and description
+                        prompt = f"A portrait of {character_data.name}. {character_data.character_description}"
+                        
+                        # Generate image
+                        image_gen = ImageGenerationService()
+                        image_data = image_gen.generate_image(prompt=prompt)
+                        
+                        if image_data:
+                            # Upload to cloudinary
+                            image_service = ImageService()
+                            url = image_service.upload_character_image(image_data, new_character.id)
+                            
+                            if url:
+                                # Update character
+                                new_character = service.update_character_image(new_character.id, url)
+                                logger.info(f"Character {new_character.id} photo_url updated in database")
+                    except Exception as e:
+                        logger.error(f"Failed to generate image for character {new_character.id}: {str(e)}")
+                        # Continue without image if generation fails
+                
+                # Create initial conversation if requested
+                if batch.create_conversations:
+                    try:
+                        conv_service = ConversationService(db)
+                        await conv_service.create_conversation(
+                            character_id=new_character.id,
+                            user_id=creator_id
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to create initial conversation for character {new_character.id}: {str(e)}")
+                        # Continue even if conversation creation fails
+                
+                # Get creator username for response
+                creator = db.query(User).filter(User.id == creator_id).first()
+                creator_username = creator.username if creator else None
+                
+                # Add to successful list
+                successful.append(AdminCharacterResponse(
+                    id=new_character.id,
+                    name=new_character.name,
+                    creator_id=new_character.creator_id,
+                    creator_username=creator_username,
+                    character_description=new_character.character_description,
+                    tagline=new_character.tagline,
+                    photo_url=new_character.photo_url,
+                    num_chats_created=new_character.num_chats_created,
+                    num_messages=new_character.num_messages,
+                    rating=new_character.rating,
+                    created_at=new_character.created_at,
+                    language=new_character.language
+                ))
+                
+            except Exception as e:
+                logger.error(f"Error creating character {character_data.name}: {str(e)}")
+                failed.append({
+                    "character": character_data.dict(),
+                    "error": str(e)
+                })
+        
+        # Return batch results
+        return BatchCharacterResponse(
+            successful=successful,
+            failed=failed,
+            total=len(batch.characters),
+            success_count=len(successful),
+            failure_count=len(failed)
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in batch character creation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to process batch: {str(e)}") 
