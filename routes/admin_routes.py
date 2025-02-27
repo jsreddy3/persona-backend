@@ -1200,6 +1200,7 @@ class CharacterUpdateRequest(BaseModel):
     tagline: Optional[str] = None
     character_description: Optional[str] = None
     language: Optional[str] = None
+    photo_url: Optional[str] = None
 
 @router.put("/characters/{character_id}", response_model=AdminCharacterResponse)
 async def update_character(
@@ -1229,6 +1230,9 @@ async def update_character(
         if character_data.language is not None:
             character.language = character_data.language
         
+        if character_data.photo_url is not None:
+            character.photo_url = character_data.photo_url
+        
         # Save changes
         db.commit()
         db.refresh(character)
@@ -1257,6 +1261,41 @@ async def update_character(
     except Exception as e:
         logger.error(f"Error updating character: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to update character: {str(e)}")
+
+@router.delete("/characters/{character_id}", status_code=204)
+async def delete_character(
+    character_id: int,
+    db: Session = Depends(get_db),
+    is_admin: bool = Depends(get_admin_access)
+):
+    """Delete a character with all associated conversations and messages"""
+    try:
+        # First check if the character exists
+        character = db.query(Character).filter(Character.id == character_id).first()
+        
+        if not character:
+            raise HTTPException(status_code=404, detail="Character not found")
+        
+        # Get all conversations associated with this character
+        conversations = db.query(Conversation).filter(Conversation.character_id == character_id).all()
+        
+        # Delete all messages in these conversations
+        for conversation in conversations:
+            db.query(Message).filter(Message.conversation_id == conversation.id).delete()
+        
+        # Delete all conversations
+        db.query(Conversation).filter(Conversation.character_id == character_id).delete()
+        
+        # Finally delete the character
+        db.delete(character)
+        db.commit()
+        
+        return None
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting character: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete character: {str(e)}")
 
 # --- Conversation Management Endpoints ---
 
