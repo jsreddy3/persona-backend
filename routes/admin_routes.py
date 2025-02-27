@@ -502,13 +502,32 @@ async def get_user_historical_data(
             ).scalar() or 0
             new_users.append(new)
             
-            # Retention rate (users who were active in this period out of users who existed before this period)
-            users_before_today = db.query(func.count(User.id)).filter(
-                User.created_at < current_date
+            # Retention rate calculation - using a more standard definition:
+            # For each date point, find users who were active in the previous period
+            # and calculate what percentage of them returned in the current period
+            
+            # Define the previous period based on our increment
+            previous_period_start = current_date - increment
+            previous_period_end = current_date
+            
+            # Find users who were active in the previous period
+            active_users_previous_period = db.query(func.count(func.distinct(User.id))).filter(
+                User.last_active >= previous_period_start,
+                User.last_active < previous_period_end,
+                User.created_at < previous_period_end  # Only include users who existed in the previous period
             ).scalar() or 1  # Avoid division by zero
             
-            retention = (active / users_before_today) * 100 if users_before_today > 0 else 0
-            retention_rates.append(round(retention, 2))
+            # Find how many of those same users were also active in the current period
+            returning_users = db.query(func.count(func.distinct(User.id))).filter(
+                User.last_active >= current_date,
+                User.last_active < next_date,
+                User.last_active >= previous_period_start,  # They were active in the previous period
+                User.last_active < previous_period_end
+            ).scalar() or 0
+            
+            # Calculate retention rate as the percentage of users from the previous period who returned
+            retention = (returning_users / active_users_previous_period) * 100 if active_users_previous_period > 0 else 0
+            retention_rates.append(round(min(retention, 100.0), 2))  # Cap at 100% to avoid impossible values
             
             current_date = next_date
         
