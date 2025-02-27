@@ -440,7 +440,7 @@ async def get_user_stats(
 
 @router.get("/analytics/user-historical", response_model=UserHistoricalData)
 async def get_user_historical_data(
-    days: int = Query(30, ge=7, le=90),  # Default to 30 days, min 7, max 90
+    days: int = Query(30, ge=1, le=90),  # Default to 30 days, min 1, max 90
     db: Session = Depends(get_db),
     is_admin: bool = Depends(get_admin_access)
 ):
@@ -449,6 +449,9 @@ async def get_user_historical_data(
         # Calculate date range
         end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=days)
+        
+        # For short time ranges (1-3 days), provide more granular data
+        use_hourly_data = days <= 3
         
         # Initialize result containers
         dates = []
@@ -459,9 +462,24 @@ async def get_user_historical_data(
         
         # Generate data for each day in the range
         current_date = start_date
+        
+        # Time increment depends on the range
+        if use_hourly_data:
+            # For 1-3 days, provide hourly data points
+            increment = timedelta(hours=4)  # Every 4 hours
+        else:
+            # For longer ranges, use daily data points
+            increment = timedelta(days=1)
+        
         while current_date <= end_date:
-            next_date = current_date + timedelta(days=1)
-            date_str = current_date.strftime("%Y-%m-%d")
+            next_date = current_date + increment
+            
+            # Format date string based on granularity
+            if use_hourly_data:
+                date_str = current_date.strftime("%Y-%m-%d %H:%M")
+            else:
+                date_str = current_date.strftime("%Y-%m-%d")
+                
             dates.append(date_str)
             
             # Total users up to this date
@@ -470,21 +488,21 @@ async def get_user_historical_data(
             ).scalar() or 0
             total_users.append(total)
             
-            # Active users on this day
+            # Active users in this time period
             active = db.query(func.count(func.distinct(User.id))).filter(
                 User.last_active >= current_date,
                 User.last_active < next_date
             ).scalar() or 0
             active_users.append(active)
             
-            # New users on this day
+            # New users in this time period
             new = db.query(func.count(User.id)).filter(
                 User.created_at >= current_date,
                 User.created_at < next_date
             ).scalar() or 0
             new_users.append(new)
             
-            # Retention rate (users who were active today out of users who existed before today)
+            # Retention rate (users who were active in this period out of users who existed before this period)
             users_before_today = db.query(func.count(User.id)).filter(
                 User.created_at < current_date
             ).scalar() or 1  # Avoid division by zero
