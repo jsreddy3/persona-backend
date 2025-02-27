@@ -109,6 +109,14 @@ class UserStats(BaseModel):
     activeUsers24h: int
     newUsers7d: int
 
+class UserHistoricalData(BaseModel):
+    dates: List[str]
+    totalUsers: List[int]
+    activeUsers: List[int]
+    newUsers: List[int]
+    retentionRate: List[float]
+    activityDistribution: Dict[str, int]
+
 # --- Admin Authentication ---
 
 async def get_admin_user(
@@ -429,6 +437,108 @@ async def get_user_stats(
     except Exception as e:
         logger.error(f"Error getting user stats: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get user stats: {str(e)}")
+
+@router.get("/analytics/user-historical", response_model=UserHistoricalData)
+async def get_user_historical_data(
+    days: int = Query(30, ge=7, le=90),  # Default to 30 days, min 7, max 90
+    db: Session = Depends(get_db),
+    is_admin: bool = Depends(get_admin_access)
+):
+    """Get historical user data for charts and visualizations"""
+    try:
+        # Calculate date range
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
+        
+        # Initialize result containers
+        dates = []
+        total_users = []
+        active_users = []
+        new_users = []
+        retention_rates = []
+        
+        # Generate data for each day in the range
+        current_date = start_date
+        while current_date <= end_date:
+            next_date = current_date + timedelta(days=1)
+            date_str = current_date.strftime("%Y-%m-%d")
+            dates.append(date_str)
+            
+            # Total users up to this date
+            total = db.query(func.count(User.id)).filter(
+                User.created_at < next_date
+            ).scalar() or 0
+            total_users.append(total)
+            
+            # Active users on this day
+            active = db.query(func.count(func.distinct(User.id))).filter(
+                User.last_active >= current_date,
+                User.last_active < next_date
+            ).scalar() or 0
+            active_users.append(active)
+            
+            # New users on this day
+            new = db.query(func.count(User.id)).filter(
+                User.created_at >= current_date,
+                User.created_at < next_date
+            ).scalar() or 0
+            new_users.append(new)
+            
+            # Retention rate (users who were active today out of users who existed before today)
+            users_before_today = db.query(func.count(User.id)).filter(
+                User.created_at < current_date
+            ).scalar() or 1  # Avoid division by zero
+            
+            retention = (active / users_before_today) * 100 if users_before_today > 0 else 0
+            retention_rates.append(round(retention, 2))
+            
+            current_date = next_date
+        
+        # Get message counts per user
+        message_counts = db.query(
+            User.id,
+            func.count(Message.id).label("message_count")
+        ).outerjoin(
+            Conversation, Conversation.creator_id == User.id
+        ).outerjoin(
+            Message, Message.conversation_id == Conversation.id
+        ).group_by(User.id).all()
+        
+        # Categorize users by activity level
+        activity_buckets = {
+            "0 messages": 0,
+            "1-5 messages": 0,
+            "6-20 messages": 0,
+            "21-50 messages": 0,
+            "51-100 messages": 0,
+            "101+ messages": 0
+        }
+        
+        for _, count in message_counts:
+            if count == 0:
+                activity_buckets["0 messages"] += 1
+            elif count <= 5:
+                activity_buckets["1-5 messages"] += 1
+            elif count <= 20:
+                activity_buckets["6-20 messages"] += 1
+            elif count <= 50:
+                activity_buckets["21-50 messages"] += 1
+            elif count <= 100:
+                activity_buckets["51-100 messages"] += 1
+            else:
+                activity_buckets["101+ messages"] += 1
+        
+        return UserHistoricalData(
+            dates=dates,
+            totalUsers=total_users,
+            activeUsers=active_users,
+            newUsers=new_users,
+            retentionRate=retention_rates,
+            activityDistribution=activity_buckets
+        )
+    except Exception as e:
+        logger.error(f"Error getting user historical data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get user historical data: {str(e)}")
 
 # --- User Management Endpoints ---
 
