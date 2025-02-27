@@ -117,6 +117,12 @@ class UserHistoricalData(BaseModel):
     retentionRate: List[float]
     activityDistribution: Dict[str, int]
 
+class CharacterStats(BaseModel):
+    totalCharacters: int
+    activeConversations: int
+    avgRating: float
+    newCharacters7d: int
+
 # --- Admin Authentication ---
 
 async def get_admin_user(
@@ -437,6 +443,44 @@ async def get_user_stats(
     except Exception as e:
         logger.error(f"Error getting user stats: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get user stats: {str(e)}")
+
+@router.get("/analytics/character-stats", response_model=CharacterStats)
+async def get_character_stats(
+    db: Session = Depends(get_db),
+    is_admin: bool = Depends(get_admin_access)
+):
+    """Get character statistics for the admin panel"""
+    try:
+        # Calculate time thresholds
+        now = datetime.utcnow()
+        seven_days_ago = now - timedelta(days=7)
+        
+        # Get total characters count
+        total_characters = db.query(func.count(Character.id)).scalar()
+        
+        # Get active conversations count (conversations with messages in the last 24 hours)
+        active_conversations = db.query(func.count(func.distinct(Conversation.id))).filter(
+            Conversation.updated_at >= now - timedelta(days=1)
+        ).scalar()
+        
+        # Get average rating of all characters
+        avg_rating_query = db.query(func.avg(Character.rating)).scalar()
+        avg_rating = round(float(avg_rating_query or 0), 1)
+        
+        # Get new characters in the last 7 days
+        new_characters_7d = db.query(func.count(Character.id)).filter(
+            Character.created_at >= seven_days_ago
+        ).scalar()
+        
+        return CharacterStats(
+            totalCharacters=total_characters,
+            activeConversations=active_conversations,
+            avgRating=avg_rating,
+            newCharacters7d=new_characters_7d
+        )
+    except Exception as e:
+        logger.error(f"Error getting character stats: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get character stats: {str(e)}")
 
 @router.get("/analytics/user-historical", response_model=UserHistoricalData)
 async def get_user_historical_data(
