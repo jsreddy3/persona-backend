@@ -36,7 +36,9 @@ class ConversationService:
             "id",  # Indonesian
             "fr",  # French
             "de",  # German
-            "zh"   # Chinese
+            "zh",   # Chinese
+            "hi",
+            "sw"
         ]
     
     @time_db_operation
