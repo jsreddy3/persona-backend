@@ -31,6 +31,7 @@ class Conversation(Base):
     system_message = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_chatted_with = Column(DateTime, nullable=True)
     
     # Relationships
     character = relationship("Character", back_populates="conversations")

@@ -227,6 +227,7 @@ class ConversationService:
             
             # Update final AI message and deduct credit
             self.repository.update_message(ai_message.id, accumulated_content)
+            self.repository.update_last_chatted_with(conversation_id)
             # Update message in memory too since we're still using it
             ai_message.content = accumulated_content
             user.credits -= 1

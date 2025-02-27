@@ -37,6 +37,7 @@ class ConversationResponse(BaseModel):
     id: int
     character_id: int
     created_at: str
+    last_chatted_with: str = None
     character: CharacterResponse
 
     class Config:
@@ -47,6 +48,8 @@ class ConversationResponse(BaseModel):
         # Convert datetime to string in ISO format
         if isinstance(obj.created_at, datetime):
             obj.created_at = obj.created_at.isoformat()
+        if isinstance(obj.last_chatted_with, datetime):
+            obj.last_chatted_with = obj.last_chatted_with.isoformat()
         return super().from_orm(obj)
 
 @router.post("/{conversation_id}/stream/token")
