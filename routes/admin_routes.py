@@ -630,6 +630,39 @@ async def delete_user(
         logger.error(f"Error deleting user: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete user: {str(e)}")
 
+@router.get("/users/language-stats")
+async def get_user_language_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get statistics about user language preferences"""
+    # Check if user has admin access
+    if not current_user or not hasattr(current_user, 'id'):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Create service and get language stats
+    from services.user_service import UserService
+    service = UserService(db)
+    language_stats = service.get_users_by_language(db)
+    
+    # Get total user count for percentage calculation
+    total_users = sum(language_stats.values())
+    
+    # Calculate percentages
+    result = {
+        "total_users": total_users,
+        "languages": [
+            {
+                "language": lang,
+                "count": count,
+                "percentage": round((count / total_users) * 100, 2) if total_users > 0 else 0
+            }
+            for lang, count in sorted(language_stats.items(), key=lambda x: x[1], reverse=True)
+        ]
+    }
+    
+    return result
+
 # --- Character Management Endpoints ---
 
 @router.get("/characters", response_model=Dict[str, Any])

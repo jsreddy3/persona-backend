@@ -161,6 +161,26 @@ async def create_character(
               "有争议的", "失控的", "欺骗性的", "令人迷惑的",
               "令人翻白眼的", "令人尴尬的", "令人捂脸的", "令人费解的",
               "激怒人的", "难以忍受的"
+            ],
+            "hi": [
+              "अराजक", "शरारती", "अप्रत्याशित", "व्यंग्यात्मक", 
+              "उकसाने वाला", "बेतुका", "अनादरपूर्ण", "विद्रोही", 
+              "नाटकीय", "अतिरंजित", "विचित्र", "अनोखा", 
+              "बेमतलब", "विरोधाभासी", "भड़काऊ", "हास्यास्पद", 
+              "विलक्षण", "नफरत योग्य", "भ्रमित करने वाला", "चिढ़ाने वाला", 
+              "विवादास्पद", "बेकाबू", "धोखेबाज", "दिग्भ्रमित करने वाला",
+              "आँखें घुमाने वाला", "शर्मनाक", "चेहरा ढकने वाला", "दिमाग हिला देने वाला",
+              "क्रोध उत्पन्न करने वाला", "असहनीय"
+            ],
+            "sw": [
+              "vurugu", "uchokozi", "isiyotabirika", "dhihaka", 
+              "uchochezi", "upuuzi", "dharau", "uasi", 
+              "mikasi", "kupiga chuku", "ajabu", "kichekesho", 
+              "isiyomaana", "kinzani", "kuchochea", "dhihaka", 
+              "kisirani", "kuchukiza", "kuchanganya", "kusumbua", 
+              "utata", "isiyotarajiwa", "udanganyifu", "kurubuni",
+              "kuudhi", "aibu", "kusikitisha", "kufadhaisha",
+              "kukasirika", "isiyovumilika"
             ]
         }
         
@@ -168,7 +188,7 @@ async def create_character(
         language = request.headers.get("accept-language", "en").split(",")[0].split("-")[0].lower()
         
         # Default to English if language not supported
-        if language not in ["en", "es", "pt", "ko", "ja", "id", "fr", "de", "zh"]:
+        if language not in ["en", "es", "pt", "ko", "ja", "id", "fr", "de", "zh", "hi", "sw"]:
             language = "rest"
             
         logger.info(f"Creating character with language: {language}")

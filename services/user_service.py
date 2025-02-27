@@ -99,3 +99,29 @@ class UserService:
         except Exception as e:
             self.db.rollback()
             raise e
+
+    def get_users_by_language(self, db: Session) -> dict:
+        """
+        Get a breakdown of users by their language preference.
+        
+        Returns:
+            A dictionary where keys are language codes and values are the count of users.
+            Example: {'en': 120, 'es': 45, 'fr': 22, ...}
+        """
+        from sqlalchemy import func
+        from database.models import User
+        
+        # Query to count users grouped by language
+        result = db.query(
+            User.language,
+            func.count(User.id).label('user_count')
+        ).group_by(
+            User.language
+        ).order_by(
+            func.count(User.id).desc()
+        ).all()
+        
+        # Convert the result to a dictionary
+        language_counts = {lang: count for lang, count in result}
+        
+        return language_counts
