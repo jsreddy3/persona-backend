@@ -32,6 +32,7 @@ class Conversation(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_chatted_with = Column(DateTime, nullable=True)
+    message_preview = Column(String, nullable=True)
     
     # Relationships
     character = relationship("Character", back_populates="conversations")

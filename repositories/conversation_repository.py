@@ -71,6 +71,7 @@ class ConversationRepository(BaseRepository[Conversation]):
             return None
             
         message.content = content
+        message.message_preview = content[0:30] + "..." if len(content) > 30 else content + "..."
         self.db.commit()
         self.db.refresh(message)
         return message

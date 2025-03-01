@@ -39,6 +39,7 @@ class ConversationResponse(BaseModel):
     created_at: str
     last_chatted_with: str = None
     character: CharacterResponse
+    message_preview: str = ""
 
     class Config:
         orm_mode = True
