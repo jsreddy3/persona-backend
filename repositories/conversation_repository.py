@@ -71,7 +71,15 @@ class ConversationRepository(BaseRepository[Conversation]):
             return None
             
         message.content = content
-        message.message_preview = content[0:30] + "..." if len(content) > 30 else content + "..."
+        
+        # Create a preview from the content
+        preview = content[0:30] + "..." if len(content) > 30 else content
+        
+        # Update the conversation's message preview
+        conversation = self.get_by_id(message.conversation_id)
+        if conversation:
+            conversation.message_preview = preview
+        
         self.db.commit()
         self.db.refresh(message)
         return message

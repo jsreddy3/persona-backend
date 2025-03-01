@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 from database.database import get_db
 from database.models import User
@@ -37,9 +37,9 @@ class ConversationResponse(BaseModel):
     id: int
     character_id: int
     created_at: str
-    last_chatted_with: str = None
+    last_chatted_with: Optional[str] = None
     character: CharacterResponse
-    message_preview: str = ""
+    message_preview: Optional[str] = ""
 
     class Config:
         orm_mode = True
