@@ -28,6 +28,7 @@ class CharacterCreate(BaseModel):
     tagline: Optional[str] = None
     photo_url: Optional[str] = None
     attributes: List[str] = []
+    types: List[str] = []
 
 class CharacterResponse(BaseModel):
     id: int
@@ -43,7 +44,7 @@ class CharacterResponse(BaseModel):
     created_at: str
     updated_at: str
     language: str
-    
+    types: List[str] = []
     class Config:
         orm_mode = True
 
@@ -208,7 +209,8 @@ async def create_character(
             photo_url=character.photo_url,
             creator_id=current_user.id,
             attributes=selected_attributes,
-            language=language
+            language=language,
+            types=character.types
         )
         
         # Generate initial image if none provided

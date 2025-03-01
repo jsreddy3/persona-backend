@@ -57,7 +57,7 @@ class Character(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     language = Column(String, default="es")
-    
+    types = Column(JSON, default=list)
     # Relationships
     creator = relationship("User", back_populates="created_characters")
     conversations = relationship("Conversation", back_populates="character")
