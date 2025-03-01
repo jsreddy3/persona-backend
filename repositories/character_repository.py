@@ -4,6 +4,8 @@ from typing import List, Optional, Dict, Any
 from .base import BaseRepository
 from database.models import Character, User
 
+# try to force some rest
+
 class CharacterRepository(BaseRepository[Character]):
     def __init__(self, db: Session):
         super().__init__(Character, db)

@@ -9,7 +9,7 @@ load_dotenv()
 
 # Debug print
 print("Environment variables loaded")
-print(f"DATABASE_URL from env: {os.getenv('DATABASE_URL')}")
+print(f"DATABASE_URL from env is: {os.getenv('DATABASE_URL')}")
 
 # Get database URL - use SQLite locally if no DATABASE_URL is set
 if os.getenv("DATABASE_URL"):
