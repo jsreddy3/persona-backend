@@ -19,7 +19,8 @@ class CharacterService:
         tagline: Optional[str] = None,
         photo_url: Optional[str] = None,
         attributes: List[str] = [],
-        language: str = "en"
+        language: str = "en",
+        character_types: List[str] = []
     ) -> Character:
         """Create a new character"""
         logger.info(f"Creating character '{name}' with language: {language}")
@@ -34,7 +35,8 @@ class CharacterService:
             "num_messages": 0,
             "rating": 0.0,
             "attributes": attributes,
-            "language": language
+            "language": language,
+            "character_types": character_types
         }
         
         return self.repository.create(character_data)
