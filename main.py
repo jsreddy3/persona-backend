@@ -10,8 +10,9 @@ from routes import (
     payment_routes,
     token_routes,
     timing_routes,
-    admin_routes
+    # admin_routes  # Original admin routes
 )
+from routes import new_admin_routes  # New optimized admin routes
 from middleware import TimingMiddleware
 from database.init_db import init_db
 import logging
@@ -71,7 +72,8 @@ app.include_router(conversation_routes.router, prefix=f"{api_prefix}/conversatio
 app.include_router(payment_routes.router, prefix=f"{api_prefix}/payments", tags=["payments"])
 app.include_router(token_routes.router, prefix=f"{api_prefix}/tokens", tags=["tokens"])
 app.include_router(timing_routes.router, prefix=f"{api_prefix}/timing", tags=["timing"])
-app.include_router(admin_routes.router, prefix=f"{api_prefix}/admin", tags=["admin"])
+# app.include_router(admin_routes.router, prefix=f"{api_prefix}/admin", tags=["admin"])  # Original admin routes
+app.include_router(new_admin_routes.router, prefix=f"{api_prefix}/admin", tags=["admin"])  # New optimized admin routes
 
 # Print all registered routes for debugging
 for route in app.routes:
