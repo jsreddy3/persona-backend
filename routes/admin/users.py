@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from database.database import get_db
 from dependencies.auth import get_admin_access
-from .utils import execute_query, get_cached_result, cache_result
+from .utils import execute_query, get_cached_result, cache_result, invalidate_cache
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -124,12 +124,12 @@ async def get_users(
         LIMIT :limit OFFSET :offset
         """)
         
-        # Execute count query
-        count_result = await execute_query(db, count_query, params)
+        # Execute count query - using synchronous version to avoid issues
+        count_result = db.execute(count_query, params)
         total = count_result.scalar() or 0
         
-        # Execute data query
-        data_result = await execute_query(db, data_query, params)
+        # Execute data query - using synchronous version to avoid issues
+        data_result = db.execute(data_query, params)
         
         # Format response
         users = []
@@ -203,8 +203,8 @@ async def get_user_by_id(
         WHERE u.id = :user_id
         """)
         
-        # Execute query
-        result = await execute_query(db, query, {"user_id": user_id})
+        # Execute query - using synchronous version to avoid issues
+        result = db.execute(query, {"user_id": user_id})
         row = result.fetchone()
         
         if not row:
@@ -253,7 +253,8 @@ async def update_user(
             SELECT EXISTS(SELECT 1 FROM users WHERE id = :user_id)
         """)
         
-        result = await execute_query(db, user_exists_query, {"user_id": user_id})
+        # Execute query - using synchronous version to avoid issues
+        result = db.execute(user_exists_query, {"user_id": user_id})
         user_exists = result.scalar()
         
         if not user_exists:
@@ -300,7 +301,8 @@ async def update_user(
                     created_at, last_active, credits_spent
         """)
         
-        result = await execute_query(db, update_query, params)
+        # Execute query - using synchronous version to avoid issues
+        result = db.execute(update_query, params)
         updated_user = result.fetchone()
         
         if updated_user:

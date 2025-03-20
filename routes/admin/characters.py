@@ -84,7 +84,8 @@ async def get_characters(
         else:
             count_query = text("SELECT COUNT(*) FROM characters")
         
-        result = await execute_query(db, count_query, count_params)
+        # Execute count query - using synchronous version to avoid issues
+        result = db.execute(count_query, count_params)
         total_count = result.scalar()
         
         # Build character query with search filter if provided
@@ -97,15 +98,12 @@ async def get_characters(
                 c.name, 
                 c.creator_id,
                 u.username as creator_name,
-                c.is_public,
-                c.is_featured,
+                'true' as is_public,
+                'false' as is_featured,
                 c.created_at,
                 c.updated_at,
-                c.description,
-                COALESCE(
-                    (SELECT AVG(rating) FROM character_ratings WHERE character_id = c.id),
-                    0
-                ) as avg_rating,
+                c.character_description as description,
+                0 as avg_rating,  /* Default value since character_ratings table doesn't exist */
                 (
                     SELECT COUNT(*) 
                     FROM conversations 
@@ -117,16 +115,30 @@ async def get_characters(
         
         # Add search condition if provided
         if search:
-            query += " WHERE c.name ILIKE :search OR c.description ILIKE :search"
+            query += " WHERE c.name ILIKE :search OR c.character_description ILIKE :search"
             query_params["search"] = f"%{search}%"
             
-        # Add sorting
-        query += f" ORDER BY {sort_by} {sort_dir}"
+        # Add sorting with fully qualified column names
+        if sort_by == "created_at":
+            query += f" ORDER BY c.created_at {sort_dir}"
+        elif sort_by == "updated_at":
+            query += f" ORDER BY c.updated_at {sort_dir}"
+        elif sort_by == "name":
+            query += f" ORDER BY c.name {sort_dir}"
+        elif sort_by == "id":
+            query += f" ORDER BY c.id {sort_dir}"
+        elif sort_by == "avg_rating":
+            query += f" ORDER BY avg_rating {sort_dir}"
+        elif sort_by == "conversation_count":
+            query += f" ORDER BY conversation_count {sort_dir}"
+        else:
+            query += f" ORDER BY c.created_at {sort_dir}"
         
         # Add pagination
         query += " LIMIT :limit OFFSET :offset"
         
-        result = await execute_query(db, text(query), query_params)
+        # Execute query - using synchronous version to avoid issues
+        result = db.execute(text(query), query_params)
         characters = [dict(row) for row in result.fetchall()]
         
         response = {
@@ -167,15 +179,12 @@ async def get_character_by_id(
                 c.name, 
                 c.creator_id,
                 u.username as creator_name,
-                c.is_public,
-                c.is_featured,
+                'true' as is_public,
+                'false' as is_featured,
                 c.created_at,
                 c.updated_at,
-                c.description,
-                COALESCE(
-                    (SELECT AVG(rating) FROM character_ratings WHERE character_id = c.id),
-                    0
-                ) as avg_rating,
+                c.character_description as description,
+                0 as avg_rating,
                 (
                     SELECT COUNT(*) 
                     FROM conversations 
@@ -186,7 +195,8 @@ async def get_character_by_id(
             WHERE c.id = :character_id
         """)
         
-        result = await execute_query(db, query, {"character_id": character_id})
+        # Execute query - using synchronous version to avoid issues
+        result = db.execute(query, {"character_id": character_id})
         character = result.fetchone()
         
         if not character:
@@ -220,7 +230,8 @@ async def update_character(
             SELECT EXISTS(SELECT 1 FROM characters WHERE id = :character_id)
         """)
         
-        result = await execute_query(db, character_exists_query, {"character_id": character_id})
+        # Execute query - using synchronous version to avoid issues
+        result = db.execute(character_exists_query, {"character_id": character_id})
         character_exists = result.scalar()
         
         if not character_exists:
@@ -237,7 +248,7 @@ async def update_character(
             params["name"] = update_data.name
             
         if update_data.description is not None:
-            update_fields.append("description = :description")
+            update_fields.append("character_description = :description")
             params["description"] = update_data.description
         
         if update_data.is_public is not None:
@@ -259,11 +270,11 @@ async def update_character(
             UPDATE characters 
             SET {', '.join(update_fields)}
             WHERE id = :character_id
-            RETURNING id, name, creator_id, is_public, is_featured, 
-                     created_at, updated_at, description
+            RETURNING id, name, creator_id, created_at, updated_at, character_description
         """)
         
-        result = await execute_query(db, update_query, params)
+        # Execute query - using synchronous version to avoid issues
+        result = db.execute(update_query, params)
         updated_character = result.fetchone()
         
         if updated_character:

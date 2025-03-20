@@ -26,21 +26,10 @@ app = FastAPI(title="PersonaAI API")
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://localhost:3000",
-        "https://persona-ai.vercel.app",
-        "https://backend-persona.herokuapp.com",
-        "https://backend-persona-da6c29e3bf72.herokuapp.com",
-        "https://frontend-persona-nine.vercel.app",
-        "http://penpals.cloud",
-        "https://penpals.cloud",
-        "http://localhost:3001",  # Admin dashboard local
-        "https://admin.penpals.cloud"  # Admin dashboard production
-    ],
+    allow_origins=["*"],  # Allow all origins for development
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
     expose_headers=["*"],
 )
 

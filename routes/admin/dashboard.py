@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import Optional
 from database.database import get_db
 from dependencies.auth import get_admin_access
-from .utils import execute_query, get_cached_result, cache_result
+from .utils import execute_query, get_cached_result, cache_result, invalidate_cache
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -99,12 +99,8 @@ async def get_dashboard_stats(
              ) AS conversation_messages) AS completion_rate
         """)
         
-        # Execute query with async method
-        result = await execute_query(
-            db, 
-            query, 
-            params={"one_day_ago": one_day_ago_str}
-        )
+        # Execute query with direct synchronous execution
+        result = db.execute(query, {"one_day_ago": one_day_ago_str})
         
         # Fetch results
         row = result.fetchone()

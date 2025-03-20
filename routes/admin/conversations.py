@@ -26,7 +26,7 @@ router = APIRouter()
 class ConversationResponse(BaseModel):
     """Model for conversation response in admin API"""
     id: int
-    user_id: int
+    creator_id: int
     username: Optional[str] = None
     character_id: int
     character_name: Optional[str] = None
@@ -73,7 +73,7 @@ async def get_conversations(
         count_params = {}
         
         if user_id:
-            where_clauses.append("c.user_id = :user_id")
+            where_clauses.append("c.creator_id = :user_id")
             count_params["user_id"] = user_id
             
         if character_id:
@@ -81,7 +81,7 @@ async def get_conversations(
             count_params["character_id"] = character_id
             
         if search:
-            where_clauses.append("(c.title ILIKE :search OR u.username ILIKE :search OR ch.name ILIKE :search)")
+            where_clauses.append("(u.username ILIKE :search OR ch.name ILIKE :search)")
             count_params["search"] = f"%{search}%"
             
         # Construct WHERE clause for count query
@@ -90,12 +90,13 @@ async def get_conversations(
         # Count total conversations with filters
         count_query = text(f"""
             SELECT COUNT(*) FROM conversations c
-            LEFT JOIN users u ON c.user_id = u.id
+            LEFT JOIN users u ON c.creator_id = u.id
             LEFT JOIN characters ch ON c.character_id = ch.id
             {where_clause}
         """)
         
-        result = await execute_query(db, count_query, count_params)
+        # Execute count query - using synchronous execution
+        result = db.execute(count_query, count_params)
         total_count = result.scalar()
         
         # Build conversation query with filters
@@ -105,13 +106,13 @@ async def get_conversations(
         query = f"""
             SELECT 
                 c.id, 
-                c.user_id,
+                c.creator_id,
                 u.username,
                 c.character_id,
                 ch.name as character_name,
                 c.created_at,
                 c.updated_at,
-                c.title,
+                'Conversation' as title,  /* Default title since column doesn't exist */
                 (
                     SELECT COUNT(*) 
                     FROM messages 
@@ -123,18 +124,30 @@ async def get_conversations(
                     WHERE conversation_id = c.id
                 ) as last_message_timestamp
             FROM conversations c
-            LEFT JOIN users u ON c.user_id = u.id
+            LEFT JOIN users u ON c.creator_id = u.id
             LEFT JOIN characters ch ON c.character_id = ch.id
             {where_clause}
         """
             
-        # Add sorting
-        query += f" ORDER BY {sort_by} {sort_dir}"
+        # Add sorting with fully qualified column names
+        if sort_by == "created_at":
+            query += f" ORDER BY c.created_at {sort_dir}"
+        elif sort_by == "updated_at":
+            query += f" ORDER BY c.updated_at {sort_dir}"
+        elif sort_by == "id":
+            query += f" ORDER BY c.id {sort_dir}"
+        elif sort_by == "message_count":
+            query += f" ORDER BY message_count {sort_dir}"
+        elif sort_by == "last_message_timestamp":
+            query += f" ORDER BY last_message_timestamp {sort_dir}"
+        else:
+            query += f" ORDER BY c.updated_at {sort_dir}"
         
         # Add pagination
         query += " LIMIT :limit OFFSET :offset"
         
-        result = await execute_query(db, text(query), query_params)
+        # Execute query - using synchronous execution
+        result = db.execute(text(query), query_params)
         conversations = [dict(row) for row in result.fetchall()]
         
         response = {
@@ -173,20 +186,21 @@ async def get_conversation_by_id(
         conversation_query = text("""
             SELECT 
                 c.id, 
-                c.user_id,
+                c.creator_id,
                 u.username,
                 c.character_id,
                 ch.name as character_name,
                 c.created_at,
                 c.updated_at,
-                c.title
+                'Conversation' as title  /* Default title since column doesn't exist */
             FROM conversations c
-            LEFT JOIN users u ON c.user_id = u.id
+            LEFT JOIN users u ON c.creator_id = u.id
             LEFT JOIN characters ch ON c.character_id = ch.id
             WHERE c.id = :conversation_id
         """)
         
-        result = await execute_query(db, conversation_query, {"conversation_id": conversation_id})
+        # Execute query - using synchronous execution
+        result = db.execute(conversation_query, {"conversation_id": conversation_id})
         conversation = result.fetchone()
         
         if not conversation:
@@ -197,16 +211,17 @@ async def get_conversation_by_id(
             SELECT 
                 id,
                 conversation_id,
-                user_id,
-                message,
-                is_bot,
+                role,  /* Using role instead of creator_id which doesn't exist */
+                content as message,  /* Using content instead of message which doesn't exist */
+                CASE WHEN role = 'assistant' THEN 1 ELSE 0 END as is_bot,
                 created_at
             FROM messages
             WHERE conversation_id = :conversation_id
             ORDER BY created_at ASC
         """)
         
-        result = await execute_query(db, messages_query, {"conversation_id": conversation_id})
+        # Execute query - using synchronous execution
+        result = db.execute(messages_query, {"conversation_id": conversation_id})
         messages = [dict(row) for row in result.fetchall()]
         
         # Construct full response
@@ -241,7 +256,8 @@ async def delete_conversation(
             SELECT EXISTS(SELECT 1 FROM conversations WHERE id = :conversation_id)
         """)
         
-        result = await execute_query(db, conversation_exists_query, {"conversation_id": conversation_id})
+        # Execute query - using synchronous execution
+        result = db.execute(conversation_exists_query, {"conversation_id": conversation_id})
         conversation_exists = result.scalar()
         
         if not conversation_exists:
@@ -254,7 +270,8 @@ async def delete_conversation(
             DELETE FROM messages WHERE conversation_id = :conversation_id
         """)
         
-        await execute_query(db, delete_messages_query, {"conversation_id": conversation_id})
+        # Execute query - using synchronous execution
+        db.execute(delete_messages_query, {"conversation_id": conversation_id})
         
         # Then, delete the conversation
         delete_conversation_query = text("""
@@ -263,7 +280,8 @@ async def delete_conversation(
             RETURNING id
         """)
         
-        result = await execute_query(db, delete_conversation_query, {"conversation_id": conversation_id})
+        # Execute query - using synchronous execution
+        result = db.execute(delete_conversation_query, {"conversation_id": conversation_id})
         deleted_conversation = result.fetchone()
         
         if deleted_conversation:
