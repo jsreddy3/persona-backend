@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from database.database import get_db
 from dependencies.auth import get_admin_access
@@ -43,6 +43,13 @@ class CharacterUpdateRequest(BaseModel):
     description: Optional[str] = None
     is_public: Optional[bool] = None
     is_featured: Optional[bool] = None
+
+class CharacterStats(BaseModel):
+    """Model for character statistics"""
+    totalCharacters: int
+    activeConversations: int
+    avgRating: float
+    newCharacters7d: int
 
 @router.get("/characters")
 async def get_characters(
@@ -312,4 +319,58 @@ async def update_character(
             
     except Exception as e:
         logger.error(f"Error updating character: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error updating character: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Error updating character: {str(e)}")
+
+@router.get("/analytics/character-stats", response_model=CharacterStats)
+async def get_character_stats(
+    db: Session = Depends(get_db),
+    is_admin: bool = Depends(get_admin_access)
+):
+    """Get character statistics for the admin panel"""
+    # Check cache first
+    cache_key = "character_stats"
+    cached_result = get_cached_result(cache_key)
+    if cached_result:
+        return cached_result
+        
+    try:
+        # Calculate time thresholds
+        now = datetime.utcnow()
+        one_day_ago = (now - timedelta(days=1)).isoformat()
+        seven_days_ago = (now - timedelta(days=7)).isoformat()
+        
+        # Use a single query to get all stats
+        query = text("""
+        SELECT
+            (SELECT COUNT(*) FROM characters) AS total_characters,
+            (SELECT COUNT(DISTINCT id) FROM conversations 
+             WHERE updated_at >= :one_day_ago) AS active_conversations,
+            COALESCE((SELECT AVG(rating) FROM characters), 0) AS avg_rating,
+            (SELECT COUNT(*) FROM characters 
+             WHERE created_at >= :seven_days_ago) AS new_characters_7d
+        """)
+        
+        # Execute query
+        result = db.execute(query, {
+            "one_day_ago": one_day_ago,
+            "seven_days_ago": seven_days_ago
+        })
+        
+        # Get results
+        row = result.fetchone()
+        
+        # Create response
+        stats = CharacterStats(
+            totalCharacters=row.total_characters,
+            activeConversations=row.active_conversations,
+            avgRating=round(float(row.avg_rating or 0), 1),
+            newCharacters7d=row.new_characters_7d
+        )
+        
+        # Cache for 5 minutes
+        cache_result(cache_key, stats.dict(), 300)
+        
+        return stats
+    except Exception as e:
+        logger.error(f"Error getting character stats: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get character stats: {str(e)}") 
