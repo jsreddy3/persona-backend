@@ -148,7 +148,19 @@ async def get_conversations(
         
         # Execute query - using synchronous execution
         result = db.execute(text(query), query_params)
-        conversations = [dict(row) for row in result.fetchall()]
+        
+        # Safely convert rows to dictionaries
+        conversations = []
+        for row in result.fetchall():
+            try:
+                # Convert row to dictionary safely by iterating through keys
+                conv_dict = {}
+                for key in row.keys():
+                    conv_dict[key] = getattr(row, key)
+                conversations.append(conv_dict)
+            except Exception as e:
+                logger.error(f"Error converting row to dictionary: {str(e)}")
+                continue
         
         response = {
             "items": conversations,
@@ -222,11 +234,28 @@ async def get_conversation_by_id(
         
         # Execute query - using synchronous execution
         result = db.execute(messages_query, {"conversation_id": conversation_id})
-        messages = [dict(row) for row in result.fetchall()]
+        
+        # Safely convert rows to dictionaries
+        messages = []
+        for row in result.fetchall():
+            try:
+                # Convert row to dictionary safely by iterating through keys
+                msg_dict = {}
+                for key in row.keys():
+                    msg_dict[key] = getattr(row, key)
+                messages.append(msg_dict)
+            except Exception as e:
+                logger.error(f"Error converting message row to dictionary: {str(e)}")
+                continue
+        
+        # Safely convert conversation row to dictionary
+        conv_dict = {}
+        for key in conversation.keys():
+            conv_dict[key] = getattr(conversation, key)
         
         # Construct full response
         response = {
-            "conversation": dict(conversation),
+            "conversation": conv_dict,
             "messages": messages,
             "message_count": len(messages)
         }
@@ -289,6 +318,7 @@ async def delete_conversation(
             invalidate_cache(f"conversation_{conversation_id}")
             invalidate_cache("conversations_list")
             
+            # Note: No need to convert deleted_conversation to dictionary since we only need the ID
             return {
                 "message": "Conversation deleted successfully",
                 "id": conversation_id,
