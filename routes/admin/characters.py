@@ -139,7 +139,19 @@ async def get_characters(
         
         # Execute query - using synchronous version to avoid issues
         result = db.execute(text(query), query_params)
-        characters = [dict(row) for row in result.fetchall()]
+        
+        # Safely convert rows to dictionaries
+        characters = []
+        for row in result.fetchall():
+            try:
+                # Convert row to dictionary safely by iterating through keys
+                char_dict = {}
+                for key in row.keys():
+                    char_dict[key] = getattr(row, key)
+                characters.append(char_dict)
+            except Exception as e:
+                logger.error(f"Error converting row to dictionary: {str(e)}")
+                continue
         
         response = {
             "items": characters,
@@ -202,7 +214,10 @@ async def get_character_by_id(
         if not character:
             raise HTTPException(status_code=404, detail="Character not found")
             
-        response = dict(character)
+        # Safely convert row to dictionary
+        response = {}
+        for key in character.keys():
+            response[key] = getattr(character, key)
         
         # Cache response for 30 seconds
         cache_result(cache_key, response, 30)
@@ -282,9 +297,14 @@ async def update_character(
             invalidate_cache(f"character_{character_id}")
             invalidate_cache("characters_list")
             
+            # Safely convert row to dictionary
+            char_dict = {}
+            for key in updated_character.keys():
+                char_dict[key] = getattr(updated_character, key)
+            
             return {
                 "message": "Character updated successfully",
-                "character": dict(updated_character),
+                "character": char_dict,
                 "success": True
             }
         else:
