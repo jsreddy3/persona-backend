@@ -160,3 +160,106 @@ class LLMService:
     def update_config(self, new_config: LLMConfig):
         """Update the LLM configuration"""
         self.config = new_config
+        
+    async def process_single_prompt(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> str:
+        """
+        Process a single prompt without conversation context
+        Args:
+            system_prompt: The system instructions
+            user_prompt: The user's prompt
+        Returns:
+            The LLM's response
+        """
+        try:
+            # Create messages array with system and user messages
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+            
+            # Call LLM with Fireworks parameters using OpenAI client
+            response = await self.client.chat.completions.create(
+                model=self.config.model,
+                messages=messages,
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_tokens
+            )
+            
+            # Extract and return response
+            if not response or not response.choices or not response.choices[0].message:
+                logger.error("Received invalid response from LLM")
+                raise RuntimeError("Invalid response from language model")
+                
+            return response.choices[0].message.content
+            
+        except Exception as e:
+            logger.error(f"Error in LLM service single prompt: {str(e)}")
+            raise RuntimeError(f"Failed to process prompt: {str(e)}")
+            
+    async def process_structured_output(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        json_schema: Dict,
+        model: str = None,
+        strict: bool = True
+    ) -> Dict:
+        """
+        Process a prompt and receive a structured JSON output conforming to the provided schema
+        Args:
+            system_prompt: The system instructions
+            user_prompt: The user's prompt
+            json_schema: JSON schema that defines the expected output format
+            model: Optional model override for this request
+            strict: Whether to enforce strict schema compliance
+        Returns:
+            Parsed JSON response conforming to the schema
+        """
+        try:
+            # Create messages array with system and user messages
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+            
+            # Set up the response format for structured output
+            response_format = {
+                "type": "json_object",
+                "schema": json_schema
+            }
+            
+            # Use a specific model if provided, otherwise use the configured model
+            model_to_use = model or self.config.model
+            
+            # Call LLM with structured output parameters
+            response = await self.client.chat.completions.create(
+                model=model_to_use,
+                messages=messages,
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_tokens,
+                response_format=response_format
+            )
+            
+            # Extract and parse the response
+            if not response or not response.choices or not response.choices[0].message:
+                logger.error("Received invalid response from LLM")
+                raise RuntimeError("Invalid response from language model")
+                
+            content = response.choices[0].message.content
+            
+            # Parse the JSON response
+            import json
+            try:
+                parsed_response = json.loads(content)
+                return parsed_response
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse JSON response: {content}")
+                raise RuntimeError("LLM response was not valid JSON")
+            
+        except Exception as e:
+            logger.error(f"Error in LLM service structured output: {str(e)}")
+            raise RuntimeError(f"Failed to process structured output: {str(e)}")

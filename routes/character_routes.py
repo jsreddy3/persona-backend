@@ -7,6 +7,7 @@ from database.models import User, Character
 from services.character_service import CharacterService
 from services.image_service import ImageService
 from services.image_generation_service import ImageGenerationService
+from services.moderation_service import ModerationService
 from dependencies.auth import get_current_user
 import logging
 import datetime
@@ -194,6 +195,27 @@ async def create_character(
             
         logger.info(f"Creating character with language: {language}")
         
+        # Check character content with moderation service before creating
+        moderation_service = ModerationService()
+        moderation_result = await moderation_service.moderate_character(
+            name=character.name,
+            character_description=character.character_description,
+            greeting=character.greeting,
+            tagline=character.tagline
+        )
+        
+        if not moderation_result.approved:
+            logger.warning(f"Character creation rejected by moderation: {moderation_result.reason}")
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": "Character content violates community guidelines",
+                    "reason": moderation_result.reason,
+                    "category": moderation_result.category
+                }
+            )
+        
+        # Continue with character creation if approved
         # Randomly select two attributes in the user's language
         import random
         selected_attributes = random.sample(all_attributes[language], 2)
