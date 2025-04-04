@@ -80,14 +80,23 @@ class CharacterRepository(BaseRepository[Character]):
         
         result = {}
         
-        # For each type, get the most popular characters of that type
+        # First get all characters in the specified language
+        all_characters = self.db.query(Character)\
+            .filter(Character.language == language)\
+            .order_by(desc(Character.num_messages))\
+            .all()
+            
+        # Then filter them in Python by character type
         for char_type in character_types:
-            chars = self.db.query(Character)\
-                .filter(Character.language == language)\
-                .filter(Character.character_types.any(char_type))\
-                .order_by(desc(Character.num_messages))\
-                .limit(limit_per_type)\
-                .all()
+            chars = []
+            for char in all_characters:
+                # Check if this character type is in the list
+                if char.character_types and char_type in char.character_types:
+                    chars.append(char)
+                    
+                    # Stop once we have enough characters
+                    if len(chars) >= limit_per_type:
+                        break
             
             # Only include types that have characters
             if chars:
