@@ -74,7 +74,7 @@ MODERATION GUIDELINES:
 - REJECT content likely to generate problematic AI images
 
 DEFAULT TO APPROVING content unless it clearly violates the guidelines. We want to allow creative expression and
-mature themes while ensuring a safe environment.
+mature themes while ensuring a safe environment. DON'T REJECT UNLESS IT VERY EXPLICITLY VIOLATES GUIDELINES.
 """
 
         user_prompt = f"""
