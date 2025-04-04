@@ -85,14 +85,23 @@ class CharacterRepository(BaseRepository[Character]):
             .filter(Character.language == language)\
             .order_by(desc(Character.num_messages))\
             .all()
+        
+        # Track characters that have already been assigned to a category
+        assigned_character_ids = set()
             
         # Then filter them in Python by character type
         for char_type in character_types:
             chars = []
             for char in all_characters:
+                # Skip if this character is already in another category
+                if char.id in assigned_character_ids:
+                    continue
+                    
                 # Check if this character type is in the list
                 if char.character_types and char_type in char.character_types:
                     chars.append(char)
+                    # Mark this character as assigned
+                    assigned_character_ids.add(char.id)
                     
                     # Stop once we have enough characters
                     if len(chars) >= limit_per_type:
