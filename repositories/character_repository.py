@@ -69,3 +69,28 @@ class CharacterRepository(BaseRepository[Character]):
             .offset(skip)\
             .limit(limit)\
             .all()
+
+    def get_grouped_by_type(self, language: str = "en", limit_per_type: int = 10) -> Dict[str, List[Character]]:
+        """Get characters grouped by their primary type"""
+        # All 8 character types in the system
+        character_types = [
+            "fictional_character", "myself", "celebrity", "regular_person", 
+            "robot", "anime", "invention", "spicy"
+        ]
+        
+        result = {}
+        
+        # For each type, get the most popular characters of that type
+        for char_type in character_types:
+            chars = self.db.query(Character)\
+                .filter(Character.language == language)\
+                .filter(Character.character_types.any(char_type))\
+                .order_by(desc(Character.num_messages))\
+                .limit(limit_per_type)\
+                .all()
+            
+            # Only include types that have characters
+            if chars:
+                result[char_type] = chars
+        
+        return result

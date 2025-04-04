@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, Request
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict
 from pydantic import BaseModel
 from database.database import get_db
 from database.models import User, Character
@@ -492,3 +492,19 @@ async def diagnose(db: Session = Depends(get_db)):
         "total_time": round(total_time * 1000, 2),  # ms
         "character_count": count
     }
+
+@router.get("/group-by-type", response_model=Dict[str, List[CharacterResponse]])
+async def get_characters_grouped_by_type(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Get characters grouped by type"""
+    try:
+        service = CharacterService(db)
+        # Get language from request header
+        language = request.headers.get("accept-language", "en").split(",")[0].split("-")[0].lower()
+        characters = service.get_characters_grouped_by_type(language=language)
+        return characters
+    except Exception as e:
+        logger.error(f"Error getting characters grouped by type: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

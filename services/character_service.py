@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
 from sqlalchemy.orm import Session
 from repositories.character_repository import CharacterRepository
 from database.models import Character
@@ -88,3 +88,8 @@ class CharacterService:
         characters = self.repository.search(query, skip=skip, limit=per_page, language=language)
         # logger.info(f"Found {len(characters)} characters for query '{query}' and language {language}")
         return characters
+
+    def get_characters_grouped_by_type(self, language: str = "en", limit_per_type: int = 10) -> Dict[str, List[Character]]:
+        """Get characters grouped by their primary type"""
+        logger.info(f"Getting characters grouped by type for language: {language}")
+        return self.repository.get_grouped_by_type(language, limit_per_type)
