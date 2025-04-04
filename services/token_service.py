@@ -1,8 +1,6 @@
 from web3 import Web3
 from eth_account import Account
 from eth_account.messages import encode_defunct
-import json
-import secrets
 import os
 import logging
 
@@ -24,24 +22,13 @@ class TokenService:
         self.abi = [
             {
                 "inputs": [
-                    {"name": "amount", "type": "uint256"},
-                    {"name": "nonce", "type": "bytes32"},
-                    {"name": "signature", "type": "bytes"}
+                    {"internalType": "uint256", "name": "amount", "type": "uint256"},
+                    {"internalType": "bytes32", "name": "nonce", "type": "bytes32"},
+                    {"internalType": "bytes", "name": "signature", "type": "bytes"}
                 ],
                 "name": "mintWithSignature",
                 "outputs": [],
                 "stateMutability": "nonpayable",
-                "type": "function"
-            },
-            {
-                "inputs": [
-                    {"name": "account", "type": "address"}
-                ],
-                "name": "balanceOf",
-                "outputs": [
-                    {"name": "", "type": "uint256"}
-                ],
-                "stateMutability": "view",
                 "type": "function"
             }
         ]
@@ -51,70 +38,37 @@ class TokenService:
             address=self.contract_address,
             abi=self.abi
         )
-
-    def create_mint_signature(self, user_address: str, amount_in_wei: int, nonce: bytes) -> bytes:
+    
+    def create_mint_signature(self, user_address: str, amount_in_wei: int, nonce: bytes = None) -> dict:
         """
         Create a signature for minting tokens
+        
+        Returns a dictionary with:
+        - nonce: the nonce used (bytes32 hex string)
+        - signature: the signature (bytes hex string)
+        - amount: the amount in wei
         """
-        # Create the message hash (must match the contract's hash creation)
+        # Generate a nonce if not provided
+        if nonce is None:
+            nonce = self.w3.keccak(text=f"{user_address}-{amount_in_wei}-{self.w3.eth.get_block('latest').timestamp}")
+        
+        # Important: We need to match exactly how the contract creates the message hash
+        # The contract uses: keccak256(abi.encodePacked(msg.sender, amount, nonce))
         message = self.w3.solidity_keccak(
             ['address', 'uint256', 'bytes32'],
-            [user_address, amount_in_wei, nonce]
+            [self.w3.to_checksum_address(user_address), amount_in_wei, nonce]
         )
         
-        # Sign the message hash
+        # Need to hash this again with the Ethereum Signed Message prefix - this is what toEthSignedMessageHash does in the contract
+        # This is crucial - the contract uses MessageHashUtils.toEthSignedMessageHash() which adds the prefix
+        message_to_sign = encode_defunct(primitive=message)
+        
+        # Sign the message with the private key
         account = Account.from_key(self.signer_private_key)
-        signed = account.sign_message(encode_defunct(message))
-        return signed.signature
-
-    def mint_tokens(self, to_address: str, amount: float) -> str:
-        """
-        Request token minting with a valid signature
-        Returns the transaction hash
-        """
-        try:
-            # Convert amount to wei (18 decimals)
-            amount_in_wei = int(amount * 10**18)
-            
-            # Generate random nonce
-            nonce = secrets.token_bytes(32)
-            
-            # Get signature
-            signature = self.create_mint_signature(to_address, amount_in_wei, nonce)
-            
-            # Build transaction data
-            mint_data = self.contract.encodeABI(
-                fn_name="mintWithSignature",
-                args=[amount_in_wei, nonce, signature]
-            )
-            
-            # Build full transaction
-            tx = {
-                'from': to_address,
-                'to': self.contract_address,
-                'data': mint_data,
-                'value': 0,
-                'gas': 200000,
-                'gasPrice': self.w3.eth.gas_price,
-                'nonce': self.w3.eth.get_transaction_count(to_address)
-            }
-            
-            # Send transaction
-            tx_hash = self.w3.eth.send_transaction(tx)
-            return tx_hash.hex()
-            
-        except Exception as e:
-            logger.error(f"Failed to mint tokens: {str(e)}", exc_info=True)
-            raise e
-
-    def get_balance(self, address: str) -> float:
-        """
-        Get token balance of an address
-        Returns balance in PERSONA tokens (not wei)
-        """
-        try:
-            balance_wei = self.contract.functions.balanceOf(address).call()
-            return balance_wei / 10**18
-        except Exception as e:
-            logger.error(f"Failed to get balance: {str(e)}", exc_info=True)
-            raise e
+        signed_message = account.sign_message(message_to_sign)
+        
+        return {
+            "nonce": nonce.hex(),
+            "signature": signed_message.signature.hex(),
+            "amount": amount_in_wei
+        }

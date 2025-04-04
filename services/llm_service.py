@@ -77,7 +77,7 @@ class LLMService:
             
         return messages
 
-    @time_network_operation
+    # @time_network_operation
     async def process_message(
         self,
         system_message: str,
@@ -118,7 +118,7 @@ class LLMService:
             logger.error(f"Error in LLM service: {str(e)}")
             raise RuntimeError(f"Failed to process message: {str(e)}")
             
-    @time_network_operation
+    # @time_network_operation
     async def stream_message(
         self,
         system_message: str,
