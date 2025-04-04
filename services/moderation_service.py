@@ -66,6 +66,7 @@ and determine if they violate our community guidelines.
 MODERATION GUIDELINES:
 - ALLOW sensual descriptions and flirtatious content (as long as it's not explicit)
 - ALLOW fictional violence, mild profanity, and mature themes when appropriate
+- ALLOW things that are objectifying, focus excessively and even problematically, just nothing extremely explicit
 - REJECT extreme racist or hateful content
 - REJECT extremely sexist or discriminatory content
 - REJECT content that explicitly describes nudity or sexual acts
