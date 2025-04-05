@@ -33,9 +33,6 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-# Add timing middleware
-app.add_middleware(TimingMiddleware)
-
 # Language middleware
 @app.middleware("http")
 async def get_accept_language(request: Request, call_next):
