@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
-from database.database import get_db
+from database.database import get_db, SessionLocal
 from database.models import User
 from services.conversation_service import ConversationService
+from services.llm_service import LLMService
 from dependencies.auth import get_current_user
 from .character_routes import CharacterResponse
 import logging
@@ -67,27 +68,88 @@ async def get_stream_token(
 async def send_message(
     conversation_id: int,
     message: MessageCreate,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     Send a message in a conversation and get the AI's response
     Returns both the user's message and the AI's response
+    
+    Optimized to avoid holding database connections during API calls
     """
     try:
-        service = ConversationService(db)
-        user_msg, ai_msg = await service.process_user_message(
-            user_id=current_user.id,
-            conversation_id=conversation_id,
-            message_content=message.content
-        )
-        return [user_msg, ai_msg]
+        user_id = current_user.id
+        message_content = message.content
+        
+        # Step 1: Get only the necessary data with a brief DB connection
+        db_read = next(get_db())
+        try:
+            # Create a service just to get required data
+            temp_service = ConversationService(db_read)
+            
+            # Check if conversation exists and user has access
+            conversation = temp_service.repository.get_by_id(conversation_id)
+            if not conversation:
+                raise ValueError("Conversation not found")
+                
+            if conversation.creator_id != user_id and user_id not in [p.id for p in conversation.participants]:
+                raise ValueError("User does not have access to this conversation")
+            
+            # Check user credits
+            user = temp_service.user_repository.get_by_id(user_id)
+            if user.credits < 1:
+                raise ValueError("Insufficient credits. Please purchase more credits to continue chatting.")
+            
+            # Get conversation history and system message
+            system_message = conversation.system_message
+            history = temp_service.get_conversation_messages(conversation_id)
+        finally:
+            # Close the first DB connection before external API call
+            db_read.close()
+        
+        # Step 2: Call LLM API without holding any DB connection
+        llm_service = LLMService()
+        ai_response = await llm_service.process_message(system_message, history, message_content)
+        
+        # Step 3: Only open a new DB connection after we have the LLM response
+        db_write = next(get_db())
+        try:
+            # Create a new service with a fresh connection for writes
+            service = ConversationService(db_write)
+            
+            # Add both messages in a transaction
+            user_message = service.repository.add_message(
+                conversation_id=conversation_id,
+                role="user",
+                content=message_content
+            )
+            
+            ai_message = service.repository.add_message(
+                conversation_id=conversation_id,
+                role="assistant",
+                content=ai_response
+            )
+            
+            # Update last chatted with timestamp
+            service.repository.update_last_chatted_with(conversation_id)
+            
+            # Deduct credit
+            user = service.user_repository.get_by_id(user_id)
+            user.credits -= 1
+            
+            # Commit all changes at once
+            db_write.commit()
+            
+            return [user_message, ai_message]
+        except Exception as e:
+            db_write.rollback()
+            raise ValueError(f"Failed to save messages: {str(e)}")
+        finally:
+            # Make sure to close the write connection
+            db_write.close()
+            
     except ValueError as e:
         logger.error(f"Error sending message: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-    except RuntimeError as e:
-        logger.error(f"Error sending message: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error sending message: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -150,40 +212,113 @@ async def stream_message(
     conversation_id: int,
     content: str,
     session_token: str = None,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     Stream a message in a conversation and get the AI's response token by token
     Returns a stream of SSE events containing tokens
+    
+    Optimized to avoid holding database connections during API calls
     """
     try:
-        service = ConversationService(db)
+        user_id = current_user.id
+        message_content = content
+        
+        # Step 1: Get only the necessary data with a brief DB connection
+        db_read = next(get_db())
+        try:
+            # Create a service just to get required data
+            temp_service = ConversationService(db_read)
+            
+            # Check if conversation exists and user has access
+            conversation = temp_service.repository.get_by_id(conversation_id)
+            if not conversation:
+                raise ValueError("Conversation not found")
+                
+            if conversation.creator_id != user_id and user_id not in [p.id for p in conversation.participants]:
+                raise ValueError("User does not have access to this conversation")
+            
+            # Check user credits
+            user = temp_service.user_repository.get_by_id(user_id)
+            if user.credits < 1:
+                raise ValueError("Insufficient credits. Please purchase more credits to continue chatting.")
+            
+            # Get conversation history and system message
+            system_message = conversation.system_message
+            history = temp_service.get_conversation_messages(conversation_id)
+            
+            # Add user message upfront, before streaming
+            user_message = temp_service.repository.add_message(
+                conversation_id=conversation_id,
+                role="user",
+                content=message_content
+            )
+            
+            # Initialize empty AI message to be updated later
+            ai_message = temp_service.repository.add_message(
+                conversation_id=conversation_id,
+                role="assistant",
+                content=""
+            )
+            
+            # Store necessary IDs for later
+            ai_message_id = ai_message.id
+            
+            # Commit these changes
+            db_read.commit()
+        finally:
+            # Close the DB connection before starting streaming
+            db_read.close()
+        
+        # Step 2: Set up LLM service for streaming (no DB connection held)
+        llm_service = LLMService()
         
         async def event_generator():
+            # Stream AI response without holding a DB connection
+            accumulated_content = ""
             try:
-                async for token in service.stream_user_message(
-                    user_id=current_user.id,
-                    conversation_id=conversation_id,
-                    message_content=content
-                ):
+                async for token in llm_service.stream_message(system_message, history, message_content):
+                    accumulated_content += token
                     yield {
                         "event": "token",
                         "data": token
                     }
+                
+                # After streaming is complete, update the message in the database
+                db_update = next(get_db())
+                try:
+                    update_service = ConversationService(db_update)
+                    # Update message with complete content
+                    update_service.repository.update_message(ai_message_id, accumulated_content)
+                    # Update last_chatted_with timestamp
+                    update_service.repository.update_last_chatted_with(conversation_id)
+                    # Deduct credit
+                    user = update_service.user_repository.get_by_id(user_id)
+                    user.credits -= 1
+                    db_update.commit()
+                except Exception as db_error:
+                    db_update.rollback()
+                    logger.error(f"Error updating message after streaming: {str(db_error)}")
+                finally:
+                    db_update.close()
+                
                 # Send done event when streaming completes successfully
                 yield {
                     "event": "done",
                     "data": ""
                 }
-            except ValueError as e:
+            except Exception as stream_error:
+                logger.error(f"Error during streaming: {str(stream_error)}")
                 yield {
                     "event": "error",
-                    "data": str(e)
+                    "data": str(stream_error)
                 }
-                
+        
         return EventSourceResponse(event_generator())
         
+    except ValueError as e:
+        logger.error(f"Error streaming message: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error streaming message: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
