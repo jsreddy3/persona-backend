@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, R
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict
 from pydantic import BaseModel
-from database.database import get_db
+from database.database import get_db, SessionLocal
 from database.models import User, Character
 from services.character_service import CharacterService
 from services.image_service import ImageService
@@ -12,6 +12,7 @@ from dependencies.auth import get_current_user
 import logging
 import datetime
 import os
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,6 @@ class GenerateImageRequest(BaseModel):
 async def create_character(
     character: CharacterCreate,
     request: Request,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Create a new character"""
@@ -195,7 +195,7 @@ async def create_character(
             
         logger.info(f"Creating character with language: {language}")
         
-        # Check character content with moderation service before creating
+        # Step 1: Check character content with moderation service first (no DB connection needed)
         moderation_service = ModerationService()
         moderation_result = await moderation_service.moderate_character(
             name=character.name,
@@ -215,75 +215,100 @@ async def create_character(
                 }
             )
         
-        # Continue with character creation if approved
+        # Step 2: Prepare data needed before DB access
         # Randomly select two attributes in the user's language
-        import random
-        selected_attributes = random.sample(all_attributes[language], 2)
+        selected_attributes = random.sample(all_attributes.get(language, all_attributes["en"]), 2)
         
-        # Create character
-        service = CharacterService(db)
+        # Step 3: Create character in database with a fresh connection
+        db = next(get_db())
+        try:
+            # Create character
+            service = CharacterService(db)
+            
+            new_character = service.create_character(
+                name=character.name,
+                character_description=character.character_description,
+                greeting=character.greeting,
+                tagline=character.tagline,
+                photo_url=character.photo_url,
+                creator_id=current_user.id,
+                attributes=selected_attributes,
+                language=language,
+                character_types=character.character_types
+            )
+            
+            # Get character ID for later and commit this transaction
+            character_id = new_character.id
+            db.commit()
+        finally:
+            # Close DB connection before any external API calls
+            db.close()
         
-        new_character = service.create_character(
-            name=character.name,
-            character_description=character.character_description,
-            greeting=character.greeting,
-            tagline=character.tagline,
-            photo_url=character.photo_url,
-            creator_id=current_user.id,
-            attributes=selected_attributes,
-            language=language,
-            character_types=character.character_types
-        )
-        
-        # Generate initial image if none provided
-        if not new_character.photo_url:
+        # Step 4: Generate image without holding DB connection
+        image_url = None
+        if not character.photo_url:
             try:
-                logger.info(f"Starting image generation for character {new_character.id}")
+                logger.info(f"Starting image generation for character {character_id}")
                 # Create a prompt combining name and description
                 prompt = f"A portrait of {character.name}. {character.character_description}"
-                # logger.info(f"Using prompt: {prompt}")
                 
                 # Generate image
                 image_gen = ImageGenerationService()
-                # logger.info("Calling getimg.ai API...")
                 image_data = image_gen.generate_image(prompt=prompt)
                 
                 if image_data:
-                    # logger.info("Image generated successfully, uploading to Cloudinary...")
                     # Upload to cloudinary
                     image_service = ImageService()
-                    url = image_service.upload_character_image(image_data, new_character.id)
-                    
-                    if url:
-                        # logger.info(f"Image uploaded successfully, URL: {url}")
-                        # Update character
-                        new_character = service.update_character_image(new_character.id, url)
-                        logger.info("Character photo_url updated in database")
-                    else:
-                        logger.error("Failed to get URL from Cloudinary upload")
+                    image_url = image_service.upload_character_image(image_data, character_id)
                 else:
                     logger.error("Failed to generate image data from getimg.ai")
-                
             except Exception as e:
                 logger.error(f"Failed to generate initial character image: {str(e)}", exc_info=True)
                 # Continue without image if generation fails
                 pass
         
-        # Create initial conversation
+        # Step 5: If we generated an image, update the character with a new DB connection
+        if image_url:
+            db_update = next(get_db())
+            try:
+                image_update_service = CharacterService(db_update)
+                new_character = image_update_service.update_character_image(character_id, image_url)
+                logger.info("Character photo_url updated in database")
+                db_update.commit()
+            except Exception as e:
+                db_update.rollback()
+                logger.error(f"Failed to update character with image URL: {str(e)}")
+            finally:
+                db_update.close()
+        
+        # Step 6: Create initial conversation with a fresh DB connection
         try:
-            from services.conversation_service import ConversationService
-            conv_service = ConversationService(db)
-            await conv_service.create_conversation(
-                character_id=new_character.id,
-                user_id=current_user.id
-            )
+            db_conv = next(get_db())
+            try:
+                from services.conversation_service import ConversationService
+                conv_service = ConversationService(db_conv)
+                await conv_service.create_conversation(
+                    character_id=character_id,
+                    user_id=current_user.id
+                )
+                db_conv.commit()
+            except Exception as e:
+                db_conv.rollback()
+                logger.error(f"Failed to create initial conversation: {str(e)}")
+            finally:
+                db_conv.close()
         except Exception as e:
-            logger.error(f"Failed to create initial conversation: {str(e)}")
-            # Continue even if conversation creation fails
-            pass
+            logger.error(f"Failed to open DB connection for conversation: {str(e)}")
         
-        return new_character
-        
+        # Step 7: Fetch the complete character data to return
+        db_final = next(get_db())
+        try:
+            final_service = CharacterService(db_final)
+            final_character = final_service.get_character_by_id(character_id)
+            return final_character
+        finally:
+            db_final.close()
+            
     except Exception as e:
         logger.error(f"Error creating character: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
