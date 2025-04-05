@@ -104,9 +104,24 @@ class Payment(Base):
     reference = Column(String, unique=True, index=True)  # Unique payment reference
     user_id = Column(Integer, ForeignKey("users.id"))
     status = Column(String)  # pending, confirmed, failed
-    amount = Column(Integer)  # Amount in credits
+    
+    # Credit value (what the user receives)
+    credits_amount = Column(Integer)  # Amount in credits
+    
+    # Payment details
+    token_type = Column(String, nullable=True)  # "WLD" or "USDC.e"
+    token_amount = Column(String, nullable=True)  # Raw token amount as string (with decimals)
+    token_decimal_places = Column(Integer, nullable=True)  # 18 for WLD, 6 for USDC.e
+    
+    # Transaction details
     transaction_id = Column(String, nullable=True)  # World ID transaction ID
+    transaction_hash = Column(String, nullable=True)  # Blockchain tx hash
+    chain = Column(String, default="worldchain")  # The blockchain used
+    sender_address = Column(String, nullable=True)  # User's wallet address
+    recipient_address = Column(String, nullable=True)  # Your receiving address
+    
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class WorldIDVerification(Base):
     __tablename__ = "world_id_verifications"
