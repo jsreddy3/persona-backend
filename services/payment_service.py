@@ -88,12 +88,10 @@ class PaymentService:
             
         decimals = TOKEN_DECIMALS[token]
         factor = 10 ** decimals
-        result = amount * factor
         
-        if not result.is_integer():
-            raise ValueError(f"The resulting amount is not a whole number: {result}")
-            
-        return int(result)
+        # Round to nearest integer instead of requiring a whole number
+        # This handles fractional amounts that are common in crypto transactions
+        return int(round(amount * factor))
     
     @staticmethod
     def decimals_to_token(amount: int, token: str) -> float:
