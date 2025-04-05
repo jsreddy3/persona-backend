@@ -304,7 +304,7 @@ async def create_character(
         db_final = next(get_db())
         try:
             final_service = CharacterService(db_final)
-            final_character = final_service.get_character_by_id(character_id)
+            final_character = final_service.get_character(character_id)
             return final_character
         finally:
             db_final.close()
