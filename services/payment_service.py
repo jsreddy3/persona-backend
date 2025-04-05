@@ -132,21 +132,40 @@ class PaymentService:
         total_usd = credit_price_usd * credits
         
         # Get current token price
-        prices = await PaymentService.get_token_prices([token_type], ["USD"])
-        token_price_data = prices["prices"][token_type]["USD"]
-        
-        # Calculate token amount needed
-        token_price_raw = int(token_price_data["amount"])
-        token_decimals = int(token_price_data["decimals"])
-        token_price = token_price_raw / (10 ** token_decimals)
-        
-        # Calculate the token amount needed (USD amount / token price in USD)
-        token_amount = total_usd / token_price
-        
-        # Convert to token with decimals
-        token_amount_with_decimals = PaymentService.token_to_decimals(token_amount, token_type)
-        
-        return (token_amount, token_amount_with_decimals)
+        try:
+            # Map to API token name
+            api_token = WORLD_API_TOKEN_MAPPING.get(token_type, token_type)
+            prices = await PaymentService.get_token_prices([token_type], ["USD"])
+            
+            # Debug print the response structure for troubleshooting
+            print(f"Token price API response: {prices}")
+            
+            if token_type not in prices["prices"]:
+                # If our internal token name is not in response, try the API token name
+                if api_token in prices["prices"]:
+                    # Use API token name to get price data
+                    token_price_data = prices["prices"][api_token]["USD"]
+                else:
+                    raise ValueError(f"Token price data not found for {token_type} or {api_token}")
+            else:
+                # Use our internal token name
+                token_price_data = prices["prices"][token_type]["USD"]
+            
+            # Calculate token amount needed
+            token_price_raw = int(token_price_data["amount"])
+            token_decimals = int(token_price_data["decimals"])
+            token_price = token_price_raw / (10 ** token_decimals)
+            
+            # Calculate the token amount needed (USD amount / token price in USD)
+            token_amount = total_usd / token_price
+            
+            # Convert to token with decimals
+            token_amount_with_decimals = PaymentService.token_to_decimals(token_amount, token_type)
+            
+            return (token_amount, token_amount_with_decimals)
+        except Exception as e:
+            print(f"Error calculating token amount: {str(e)}")
+            raise
     
     @staticmethod
     def initiate_payment(
