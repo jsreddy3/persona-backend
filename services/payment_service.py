@@ -15,6 +15,12 @@ TOKEN_DECIMALS = {
 SUPPORTED_TOKENS = ["WLD", "USDC.e"]
 DEFAULT_TOKEN = "WLD"
 
+# Mapping between our internal token names and World App API token names
+WORLD_API_TOKEN_MAPPING = {
+    "WLD": "WLD",
+    "USDC.e": "USDCE"
+}
+
 class PaymentService:
     """Service for handling payment operations with World ID MiniKit"""
     
@@ -33,7 +39,9 @@ class PaymentService:
         Returns:
             Dictionary of price information
         """
-        crypto_str = ",".join(crypto_currencies)
+        # Convert our token names to World App API token names
+        api_crypto_currencies = [WORLD_API_TOKEN_MAPPING.get(token, token) for token in crypto_currencies]
+        crypto_str = ",".join(api_crypto_currencies)
         fiat_str = ",".join(fiat_currencies)
         
         async with httpx.AsyncClient() as client:
@@ -47,8 +55,21 @@ class PaymentService:
             
             if response.status_code != 200:
                 raise Exception(f"Failed to get token prices: {response.text}")
+            
+            result = response.json()["result"]
+            
+            # Convert World App API token names back to our internal token names in the response
+            if "prices" in result:
+                prices = {}
+                for api_token, token_data in result["prices"].items():
+                    # Map from API token name back to our internal token name
+                    internal_token = next((our_token for our_token, api_name in WORLD_API_TOKEN_MAPPING.items() 
+                                          if api_name == api_token), api_token)
+                    prices[internal_token] = token_data
                 
-            return response.json()["result"]
+                result["prices"] = prices
+                
+            return result
     
     @staticmethod
     def token_to_decimals(amount: float, token: str) -> int:
