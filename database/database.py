@@ -32,7 +32,19 @@ if DATABASE_URL.startswith("sqlite"):
         connect_args={"check_same_thread": False}  # Needed for SQLite
     )
 else:
-    engine = create_engine(DATABASE_URL)
+    # Configure connection pooling to handle concurrent connections efficiently
+    # - pool_size: Maximum number of permanent connections to keep
+    # - max_overflow: Maximum number of connections that can be created above pool_size
+    # - pool_timeout: Seconds to wait before giving up on getting a connection from the pool
+    # - pool_recycle: Connections older than this many seconds will be reestablished
+    engine = create_engine(
+        DATABASE_URL,
+        pool_size=20,              # Default permanent connection pool size
+        max_overflow=30,           # Allow 30 connections in excess of pool_size
+        pool_timeout=30,           # Wait up to 30 seconds for a connection
+        pool_recycle=1800,         # Recycle connections older than 30 minutes
+        pool_pre_ping=True         # Verify connections are still active before using
+    )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
