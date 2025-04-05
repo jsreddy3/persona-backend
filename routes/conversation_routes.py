@@ -247,6 +247,15 @@ async def stream_message(
             system_message = conversation.system_message
             history = temp_service.get_conversation_messages(conversation_id)
             
+            # Convert history objects to plain dictionaries before closing connection
+            serialized_history = []
+            for msg in history:
+                serialized_history.append({
+                    "id": msg.id,
+                    "role": msg.role,
+                    "content": msg.content
+                })
+            
             # Add user message upfront, before streaming
             user_message = temp_service.repository.add_message(
                 conversation_id=conversation_id,
@@ -277,7 +286,7 @@ async def stream_message(
             # Stream AI response without holding a DB connection
             accumulated_content = ""
             try:
-                async for token in llm_service.stream_message(system_message, history, message_content):
+                async for token in llm_service.stream_message(system_message, serialized_history, message_content):
                     accumulated_content += token
                     yield {
                         "event": "token",
