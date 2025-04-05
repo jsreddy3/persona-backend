@@ -129,7 +129,6 @@ class PaymentService:
         credit_price_usd = float(os.getenv("CREDIT_PRICE_USD", "0.1"))  # Default $0.10 per credit
         total_usd = credit_price_usd * credits
         
-        # Get current token price
         try:
             # Map to API token name
             api_token = WORLD_API_TOKEN_MAPPING.get(token_type, token_type)
@@ -155,12 +154,13 @@ class PaymentService:
             token_price = token_price_raw / (10 ** token_decimals)
             
             # Calculate the token amount needed (USD amount / token price in USD)
-            token_amount = total_usd / token_price
+            # This gives us the human-readable amount (e.g., 1.36 WLD for $1.00)
+            human_readable_amount = total_usd / token_price
             
-            # Convert to token with decimals
-            token_amount_with_decimals = PaymentService.token_to_decimals(token_amount, token_type)
+            # Convert to token with decimals for blockchain
+            raw_amount = PaymentService.token_to_decimals(human_readable_amount, token_type)
             
-            return (token_amount, token_amount_with_decimals)
+            return (human_readable_amount, raw_amount)
         except Exception as e:
             print(f"Error calculating token amount: {str(e)}")
             raise
