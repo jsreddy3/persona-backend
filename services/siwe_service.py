@@ -274,9 +274,8 @@ class SIWEService:
                         w3 = Web3(Web3.HTTPProvider(rpc_url))
                         if not w3.is_connected():
                             logger.error(f"Failed to connect to RPC endpoint: {rpc_url}")
-                            # For now, trust the signature even without contract verification
-                            logger.warning("RPC connection failed, but signature is valid. Accepting auth.")
-                            return Web3.to_checksum_address(address)
+                            # NEVER accept auth when RPC connection fails
+                            return None
                             
                         # Ensure addresses are checksummed
                         checksum_wallet = Web3.to_checksum_address(address)
@@ -294,22 +293,17 @@ class SIWEService:
                                 return Web3.to_checksum_address(address)
                             else:
                                 logger.error(f"Contract verification failed: {checksum_signer} is not authorized for {checksum_wallet}")
-                                # For production: return None to fail the auth
-                                # For now, to aid debugging, let's accept it and log the discrepancy
-                                logger.warning("Accepting auth despite failed contract verification (for debugging)")
-                                return Web3.to_checksum_address(address)
+                                # NEVER accept auth when verification fails
+                                return None
                         except Exception as contract_error:
                             # Contract call failed - could be not a contract or wrong ABI
                             logger.error(f"Contract call failed: {str(contract_error)}")
-                            # For now, let's trust the signature if contract call fails
-                            # This differs from MiniKit but enables more wallet types to work
-                            logger.warning("Contract verification failed, but signature is valid. Accepting auth.")
-                            return Web3.to_checksum_address(address)
+                            # NEVER accept auth when contract verification fails
+                            return None
                     except Exception as web3_error:
                         logger.error(f"Web3 verification error: {str(web3_error)}")
-                        # For now, trust the signature even without contract verification
-                        logger.warning("Web3 verification failed, but signature is valid. Accepting auth.")
-                        return Web3.to_checksum_address(address)
+                        # NEVER accept auth without verification
+                        return None
                 except Exception as sig_error:
                     logger.error(f"Signature verification error: {str(sig_error)}")
                     return None
