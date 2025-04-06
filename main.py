@@ -13,6 +13,7 @@ from routes import (
     # admin_routes  # Original admin routes
 )
 from routes import new_admin_routes  # New optimized admin routes
+from routes import auth_routes  # New wallet auth routes
 from middleware import TimingMiddleware
 from database.init_db import init_db
 import logging
@@ -58,6 +59,7 @@ app.include_router(conversation_routes.router, prefix=f"{api_prefix}/conversatio
 app.include_router(payment_routes.router, prefix=f"{api_prefix}/payments", tags=["payments"])
 app.include_router(token_routes.router, prefix=f"{api_prefix}/tokens", tags=["tokens"])
 app.include_router(timing_routes.router, prefix=f"{api_prefix}/timing", tags=["timing"])
+app.include_router(auth_routes.router, prefix=f"{api_prefix}/auth", tags=["auth"])  # New wallet auth routes
 # app.include_router(admin_routes.router, prefix=f"{api_prefix}/admin", tags=["admin"])  # Original admin routes
 app.include_router(new_admin_routes.router, prefix=f"{api_prefix}/admin", tags=["admin"])  # New optimized admin routes
 

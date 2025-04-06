@@ -6,11 +6,12 @@ from datetime import datetime
 import json
 import logging
 import re
-from database.database import get_db
+from database.database import get_db, SessionLocal
 from database.models import User, WorldIDVerification
 from repositories.user_repository import UserRepository
 from services.user_service import UserService
 from services.world_id_service import WorldIDService
+from services.siwe_service import SIWEService
 from dependencies.auth import get_current_user, create_session
 from web3 import Web3
 
@@ -29,7 +30,9 @@ class VerifyRequest(BaseModel):
     language: str = Field(default="en")
 
 class UserResponse(BaseModel):
-    world_id: str
+    id: int
+    wallet_address: Optional[str]
+    world_id: Optional[str]  # Now optional since users can authenticate with just wallet
     username: str
     language: str
     credits: int
@@ -111,15 +114,12 @@ async def verify_world_id_credentials(
             logger.error(f"No verification found for nullifier_hash: {parsed_creds.nullifier_hash}")
             return None
         
-        # logger.info(f"Found verification for nullifier_hash: {parsed_creds.nullifier_hash}")
-        
         # Update user's last_active timestamp
         user = db.query(User).filter(
             User.world_id == parsed_creds.nullifier_hash
         ).first()
         
         if user:
-            # logger.info(f"Updating last_active for user: {user.world_id}")
             user.last_active = datetime.utcnow()
             db.commit()
         else:
@@ -129,6 +129,44 @@ async def verify_world_id_credentials(
         
     except (json.JSONDecodeError, KeyError) as e:
         logger.error(f"Error parsing credentials: {str(e)}")
+        return None
+
+async def verify_wallet_address(
+    request: Request,
+    db: Session = Depends(get_db)
+) -> Optional[str]:
+    """Verify wallet address from header and check if it's linked to a user"""
+    logger.info("Verifying wallet address from header")
+    
+    wallet_address = request.headers.get('X-Wallet-Address')
+    if not wallet_address:
+        logger.info("No wallet address found in header")
+        return None
+    
+    try:
+        # Validate wallet address format
+        if not Web3.is_address(wallet_address):
+            logger.error(f"Invalid wallet address format: {wallet_address}")
+            return None
+            
+        # Convert to checksum address
+        wallet_address = Web3.to_checksum_address(wallet_address)
+        
+        # Check if wallet address is linked to a user
+        user = db.query(User).filter(
+            User.wallet_address == wallet_address
+        ).first()
+        
+        if user:
+            user.last_active = datetime.utcnow()
+            db.commit()
+            return wallet_address
+        else:
+            logger.error(f"No user found with wallet address: {wallet_address}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error verifying wallet address: {str(e)}")
         return None
 
 @router.get("/{user_id}/stats")
@@ -160,19 +198,24 @@ def purchase_credits(
 @router.post("/verify", response_model=dict)
 async def verify_world_id(
     request: VerifyRequest,
-    req: Request,
-    db: Session = Depends(get_db)
+    req: Request
 ):
-    """Verify a World ID proof and create/update user"""
+    """
+    Verify a World ID proof and create/update user
+    
+    Note: This route is being maintained for backward compatibility
+    but will be deprecated in favor of the wallet-based auth
+    """
+    # Following optimized DB connection pattern
+    db = SessionLocal()
     try:
-        # logger.info(f"Verifying request: {request}")
-        user_repo = UserRepository(db)
-        world_id_service = WorldIDService(user_repo)
-        
         # Get language from Accept-Language header
         accept_language = req.headers.get("accept-language", "en")
         language = parse_accept_language(accept_language)
         logger.info(f"Using language from header: {language}")
+        
+        user_repo = UserRepository(db)
+        world_id_service = WorldIDService(user_repo)
         
         result = await world_id_service.verify_proof(
             nullifier_hash=request.nullifier_hash,
@@ -184,7 +227,6 @@ async def verify_world_id(
         )
         
         # Create session token after successful verification
-        # The user is already created/updated by WorldIDService
         session_token = create_session(result["user"]["id"], db)
         
         # Return both the verification result and session token
@@ -199,35 +241,26 @@ async def verify_world_id(
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(
     current_user: User = Depends(get_current_user)
 ):
     """Get the current user's information"""
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-        
-    return UserResponse(
-        world_id=current_user.world_id,
-        username=current_user.username or "Anonymous User",
-        language=current_user.language,
-        credits=current_user.credits
-    )
+    return current_user
 
-@router.get("/stats")
+@router.get("/stats", response_model=dict)
 async def get_user_stats(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get user stats"""
     try:
-        # Get total conversations (created + participated)
-        total_conversations = len(set(current_user.created_conversations + current_user.participated_conversations))
-        
         return {
-            "credits": current_user.credits,
-            "conversations": total_conversations,
+            "credits_used": current_user.credits_used,
+            "messages_sent": current_user.messages_sent,
             "characters": len(current_user.created_characters),
             "username": current_user.username,
             "character_messages_received": current_user.character_messages_received
@@ -238,18 +271,33 @@ async def get_user_stats(
 
 @router.put("/update", response_model=UserResponse)
 async def update_user(
-    user_update: UserUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    user_update: UserUpdate
 ):
     """Update user profile"""
+    # Following optimized DB connection pattern
+    db = SessionLocal()
     try:
+        # Get current user - need to replicate dependency logic
+        current_user = get_current_user(db=db)
+        
         # Validate wallet address if provided
         if user_update.wallet_address:
             if not Web3.is_address(user_update.wallet_address):
                 raise HTTPException(status_code=400, detail="Invalid Ethereum address")
             # Convert to checksum address
             user_update.wallet_address = Web3.to_checksum_address(user_update.wallet_address)
+            
+            # Check if wallet is already linked to another account
+            existing_user = db.query(User).filter(
+                User.wallet_address == user_update.wallet_address,
+                User.id != current_user.id
+            ).first()
+            
+            if existing_user:
+                raise HTTPException(
+                    status_code=409, 
+                    detail="This wallet is already linked to another account"
+                )
             
         service = UserService(db)
         updated_user = service.update_user(
@@ -260,3 +308,5 @@ async def update_user(
     except Exception as e:
         logger.error(f"Error updating user: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()

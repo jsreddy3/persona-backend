@@ -142,6 +142,14 @@ class TokenRedemption(Base):
     # Relationship
     user = relationship("User", back_populates="token_redemptions")
 
+class SIWENonce(Base):
+    __tablename__ = "siwe_nonces"
+    
+    nonce = Column(String, primary_key=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+    used = Column(Boolean, default=False)
+
 class WorldIDVerification(Base):
     __tablename__ = "world_id_verifications"
 

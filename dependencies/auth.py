@@ -6,8 +6,9 @@ from pydantic import BaseModel
 from datetime import datetime, timedelta
 import json
 import logging
-from database.database import get_db
+from database.database import get_db, SessionLocal
 from database.models import User, WorldIDVerification, Session as DbSession
+from web3 import Web3
 import secrets
 
 logger = logging.getLogger(__name__)
@@ -53,7 +54,7 @@ def get_session(token: str, db: Session) -> Optional[DbSession]:
 security = HTTPBearer(auto_error=False)
 
 async def get_current_user(
-    request: Request,
+    request: Request = None,
     session_token: str = Cookie(None),
     session_token_query: str = Query(None, alias="session_token"),
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -63,17 +64,14 @@ async def get_current_user(
     Get current user from either:
     1. Session token in Authorization header
     2. Session token in cookie or query param
-    3. World ID credentials in X-WorldID-Credentials header
+    3. Wallet address in X-Wallet-Address header
+    4. World ID credentials in X-WorldID-Credentials header (legacy)
     """
-    logger.info("Auth headers: %s", dict(request.headers))
-    # logger.info("Session token from cookie: %s", session_token and session_token[:8])
-    # logger.info("Session token from query: %s", session_token_query and session_token_query[:8])
-    # logger.info("Bearer token: %s", credentials and credentials.credentials[:8])
+    logger.info("Auth headers: %s", dict(request.headers) if request else {})
     
     # First try session token
     token = session_token or session_token_query
     if token:
-        # logger.info(f"Trying session token: {token[:8]}...")
         session = get_session(token, db)
         
         if session:
@@ -111,14 +109,57 @@ async def get_current_user(
     else:
         logger.info("No session token provided")
     
-    # If no valid session, try World ID credentials
+    # If no request object, we can't check headers
     if not request:
         raise HTTPException(
             status_code=401,
             detail="No authentication provided",
             headers={"WWW-Authenticate": "Bearer"}
         )
+    
+    # Try wallet address first (preferred auth method)
+    wallet_address = request.headers.get('X-Wallet-Address')
+    if wallet_address:
+        try:
+            # Validate wallet address format
+            if not Web3.is_address(wallet_address):
+                logger.error(f"Invalid wallet address format: {wallet_address}")
+                raise HTTPException(
+                    status_code=401,
+                    detail="Invalid wallet address",
+                    headers={"WWW-Authenticate": "Bearer"}
+                )
+                
+            # Convert to checksum address
+            wallet_address = Web3.to_checksum_address(wallet_address)
+            
+            # Get user by wallet address
+            user = db.query(User).filter(
+                User.wallet_address == wallet_address
+            ).first()
+            
+            if user:
+                # Update last active
+                user.last_active = datetime.utcnow()
+                db.commit()
+                return user
+            else:
+                logger.error(f"No user found with wallet address: {wallet_address}")
+                raise HTTPException(
+                    status_code=401,
+                    detail="User not found for wallet address",
+                    headers={"WWW-Authenticate": "Bearer"}
+                )
+                
+        except Exception as e:
+            logger.error(f"Error verifying wallet address: {str(e)}")
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid wallet address",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
         
+    # If no valid wallet, try World ID credentials (legacy)
     credentials = request.headers.get('X-WorldID-Credentials')
     if not credentials:
         raise HTTPException(

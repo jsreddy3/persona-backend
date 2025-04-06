@@ -16,3 +16,4 @@ python-multipart
 web3==6.11.4
 parsimonious==0.10.0
 gunicorn==21.2.0
+eth-account
