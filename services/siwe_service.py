@@ -178,12 +178,16 @@ class SIWEService:
                     
                 # Full production implementation with eth_account for signature verification
                 try:
+                    # Ensure the message has the proper format with parenthetical URLs
+                    # This is critical for signature verification to match what was actually signed
+                    formatted_message = self.ensure_proper_message_format(message_to_verify, siwe_message_data)
+                    
                     # Use encode_defunct to create an EIP-191 encoded message
-                    # IMPORTANT: Use the raw message from MiniKit directly for verification
-                    message_object = encode_defunct(text=message_to_verify)
+                    # IMPORTANT: Use the properly formatted message for verification
+                    message_object = encode_defunct(text=formatted_message)
                     
                     # Debug logging
-                    logger.info(f"SIWE Message to verify: '{message_to_verify}'")
+                    logger.info(f"SIWE Message to verify: '{formatted_message}'")
                     logger.info(f"Raw signature: '{signature}'")
                     
                     # Recover the address from the signature
@@ -255,6 +259,51 @@ class SIWEService:
         except Exception as e:
             logger.error(f"Error parsing SIWE message: {str(e)}")
             return {}
+
+    def ensure_proper_message_format(self, message_to_verify: str, siwe_message_data: Dict[str, Any]) -> str:
+        """
+        Ensure the message has the proper format with parenthetical URLs that MiniKit generates.
+        This is critical for signature verification.
+        
+        Args:
+            message_to_verify: The original message to format
+            siwe_message_data: The parsed SIWE message data
+            
+        Returns:
+            Properly formatted message string
+        """
+        # If message already has parenthetical URLs, return it as is
+        if " (" in message_to_verify:
+            return message_to_verify
+            
+        # Get the domain from parsed data
+        domain = siwe_message_data.get("domain", "")
+        if not domain:
+            return message_to_verify
+            
+        # Format: Replace the domain with domain (domain/) pattern that MiniKit generates
+        domain_pattern = f"{domain}"
+        domain_replacement = f"{domain} ({domain}/)"
+        
+        # Replace in the first line (domain) and in the URI line
+        lines = message_to_verify.split('\n')
+        if len(lines) > 0:
+            # Replace in the first line (domain wants you to sign in...)
+            lines[0] = lines[0].replace(domain_pattern, domain_replacement)
+            
+            # Find and replace in the URI line
+            for i, line in enumerate(lines):
+                if line.startswith("URI:"):
+                    uri_parts = line.split('/')
+                    if len(uri_parts) > 2:
+                        # The domain is everything up to the first slash after http(s)://
+                        uri_domain_end = line.find('/', line.find('://') + 3)
+                        if uri_domain_end > 0:
+                            uri_domain = line[:uri_domain_end]
+                            uri_replacement = f"{uri_domain} ({uri_domain}/)"
+                            lines[i] = lines[i].replace(uri_domain, uri_replacement)
+        
+        return '\n'.join(lines)
 
     def get_user_by_wallet(self, db: Session, wallet_address: str) -> Optional[User]:
         """Get a user by wallet address"""
