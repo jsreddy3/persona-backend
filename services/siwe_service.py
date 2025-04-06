@@ -7,8 +7,41 @@ import secrets
 from web3 import Web3
 from eth_account import Account
 from eth_account.messages import encode_defunct
+import os
 
 logger = logging.getLogger(__name__)
+
+# Safe contract ABI for the isOwner function
+SAFE_CONTRACT_ABI = [
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "owner",
+                "type": "address"
+            }
+        ],
+        "name": "isOwner",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    }
+]
+
+# RPC endpoints for different chains
+CHAIN_RPC_URLS = {
+    # Chain ID 480 is Optimism Sepolia
+    '480': os.getenv('OPTIMISM_SEPOLIA_RPC_URL', 'https://sepolia.optimism.io'),
+    # Can add more chains as needed
+    '1': 'https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161',  # Ethereum mainnet
+    '10': 'https://mainnet.optimism.io',  # Optimism mainnet
+}
 
 class SIWEService:
     def generate_nonce(self, db: Session) -> str:
@@ -95,38 +128,42 @@ class SIWEService:
             wallet_address if validation succeeds, None otherwise
         """
         try:
-            # First verify the nonce is valid and unused
-            if not self.verify_nonce(db, nonce):
-                logger.error(f"Invalid or expired nonce: {nonce}")
-                return None
-                
-            # Verify payload status
-            if payload.get("status") != "success":
-                logger.error(f"Payload status is not success: {payload.get('status')}")
-                return None
-                
-            # Extract message, signature, and address from payload
+            # Extract data from payload
+            status = payload.get("status")
             message = payload.get("message")
-            signature = payload.get("signature")
+            signature = payload.get("signature") 
             address = payload.get("address")
             
-            if not message or not signature or not address:
-                logger.error("Missing required fields in payload")
+            # Basic validation
+            if not all([status, message, signature, address]):
+                logger.error("Missing required fields in wallet auth payload")
                 return None
                 
-            try:
-                # Parse and validate SIWE message
-                siwe_message_data = self.parse_siwe_message(message)
+            if status != "success":
+                logger.error(f"Invalid status in wallet auth payload: {status}")
+                return None
                 
-                # Validate nonce in message matches expected nonce
+            # Verify the nonce
+            if not self.verify_nonce(db, nonce):
+                logger.error(f"Invalid nonce: {nonce}")
+                return None
+                
+            # Mark the nonce as used to prevent replay attacks
+            self.use_nonce(db, nonce)
+            
+            # Parse SIWE message
+            siwe_message_data = self.parse_siwe_message(message)
+            
+            # Additional validations
+            try:
+                # Validate nonce in message
                 if siwe_message_data.get("nonce") != nonce:
-                    logger.error(f"Nonce mismatch. Got: {siwe_message_data.get('nonce')}, Expected: {nonce}")
+                    logger.error(f"Nonce mismatch. Message: {siwe_message_data.get('nonce')}, Expected: {nonce}")
                     return None
                     
                 # Validate expiration time
                 expiration_time = siwe_message_data.get("expiration_time")
                 if expiration_time:
-                    # Convert to offset-naive datetime for comparison with datetime.utcnow()
                     try:
                         # Parse ISO format with timezone
                         expiration = datetime.fromisoformat(expiration_time.replace('Z', '+00:00'))
@@ -155,15 +192,12 @@ class SIWEService:
                         return None
                         
                 # Validate the address in the message matches the address in the payload
-                if siwe_message_data.get("address").lower() != address.lower():
+                if siwe_message_data.get("address", "").lower() != address.lower():
                     logger.error(f"Address mismatch. Message: {siwe_message_data.get('address')}, Payload: {address}")
                     return None
                     
                 # Full production implementation with eth_account for signature verification
                 try:
-                    # Use encode_defunct to create an EIP-191 encoded message
-                    message_object = encode_defunct(text=message)
-                    
                     # Debug logging
                     logger.info(f"SIWE Message to verify: '{message}'")
                     logger.info(f"Raw signature: '{signature}'")
@@ -191,37 +225,82 @@ class SIWEService:
                         vrs = (v, r, s)
                         logger.info(f"Processed signature components - v: {v}, r: {r}, s: {s}")
                         
+                        # Prepare the message according to ERC-191 format 
+                        message_object = encode_defunct(text=message)
+                        
                         # Use recover_message with vrs tuple format
                         recovered_address = Account.recover_message(message_object, vrs=vrs)
                     else:
                         # Fallback to direct signature format - only for debugging
                         logger.warning(f"Unexpected signature length: {len(sig_bytes)}")
+                        message_object = encode_defunct(text=message)
                         recovered_address = Account.recover_message(message_object, signature=signature)
                     
                     logger.info(f"Full SIWE data: {siwe_message_data}")
                     logger.info(f"Recovered address: {recovered_address}")
                     
-                    # Compare recovered address with the one in the payload
-                    if recovered_address.lower() != address.lower():
-                        logger.error(f"Signature verification failed. Recovered: {recovered_address}, Expected: {address}")
+                    # Verify the recovered signer is authorized for the wallet address
+                    chain_id = siwe_message_data.get("chain_id")
+                    if not chain_id:
+                        logger.error("Chain ID not found in SIWE message")
                         return None
                         
-                    logger.info(f"Signature verified successfully for address: {address}")
-                except Exception as e:
-                    logger.error(f"Signature verification error: {str(e)}")
+                    # Get RPC URL for the chain
+                    rpc_url = CHAIN_RPC_URLS.get(chain_id)
+                    if not rpc_url:
+                        logger.error(f"No RPC URL found for chain ID {chain_id}")
+                        return None
+                    
+                    try:
+                        # Initialize Web3 connection
+                        w3 = Web3(Web3.HTTPProvider(rpc_url))
+                        if not w3.is_connected():
+                            logger.error(f"Failed to connect to RPC endpoint: {rpc_url}")
+                            return None
+                            
+                        # Ensure addresses are checksummed
+                        checksum_wallet = Web3.to_checksum_address(address)
+                        checksum_signer = Web3.to_checksum_address(recovered_address)
+                        
+                        # Try direct address comparison first (simpler case)
+                        if checksum_wallet.lower() == checksum_signer.lower():
+                            logger.info(f"Direct address match: {checksum_wallet}")
+                            return Web3.to_checksum_address(address)
+                        
+                        # If addresses don't match, verify through contract
+                        logger.info(f"Checking if {checksum_signer} is authorized for wallet {checksum_wallet}")
+                        try:
+                            # Create contract instance
+                            contract = w3.eth.contract(address=checksum_wallet, abi=SAFE_CONTRACT_ABI)
+                            
+                            # Call isOwner function
+                            is_authorized = contract.functions.isOwner(checksum_signer).call()
+                            
+                            if is_authorized:
+                                logger.info(f"Contract verification successful: {checksum_signer} is authorized for {checksum_wallet}")
+                                return Web3.to_checksum_address(address)
+                            else:
+                                logger.error(f"Contract verification failed: {checksum_signer} is not authorized for {checksum_wallet}")
+                                return None
+                        except Exception as contract_error:
+                            # Contract call may fail if the wallet is not a Safe/contract wallet
+                            logger.warning(f"Contract call failed, possibly not a Safe wallet: {str(contract_error)}")
+                            logger.warning("For non-contract wallets, direct address matching should be used.")
+                            logger.error(f"Signature verification failed. Recovered: {recovered_address}, Expected: {address}")
+                            return None
+                    except Exception as web3_error:
+                        logger.error(f"Web3 verification error: {str(web3_error)}")
+                        return None
+                except Exception as sig_error:
+                    logger.error(f"Signature verification error: {str(sig_error)}")
                     return None
-                
-                # If all validations pass, return the wallet address
-                return Web3.to_checksum_address(address)
-                
-            except Exception as e:
-                logger.error(f"Error validating SIWE message: {str(e)}")
+            except Exception as validation_error:
+                logger.error(f"Error validating SIWE message: {str(validation_error)}")
                 return None
-            
         except Exception as e:
             logger.error(f"Error verifying wallet auth: {str(e)}")
             return None
-            
+
     def parse_siwe_message(self, message_str: str) -> Dict[str, str]:
         """
         Parse a SIWE message string into its components
