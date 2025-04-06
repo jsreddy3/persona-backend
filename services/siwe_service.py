@@ -126,17 +126,32 @@ class SIWEService:
                 # Validate expiration time
                 expiration_time = siwe_message_data.get("expiration_time")
                 if expiration_time:
-                    expiration = datetime.fromisoformat(expiration_time.replace('Z', '+00:00'))
-                    if expiration < datetime.utcnow():
-                        logger.error("Message has expired")
+                    # Convert to offset-naive datetime for comparison with datetime.utcnow()
+                    try:
+                        # Parse ISO format with timezone
+                        expiration = datetime.fromisoformat(expiration_time.replace('Z', '+00:00'))
+                        # Remove timezone info to make it naive
+                        expiration = expiration.replace(tzinfo=None)
+                        if expiration < datetime.utcnow():
+                            logger.error("Message has expired")
+                            return None
+                    except Exception as e:
+                        logger.error(f"Error parsing expiration time: {str(e)}")
                         return None
                         
                 # Validate not before time
                 not_before = siwe_message_data.get("not_before")
                 if not_before:
-                    not_before_time = datetime.fromisoformat(not_before.replace('Z', '+00:00'))
-                    if not_before_time > datetime.utcnow():
-                        logger.error("Not Before time has not passed")
+                    try:
+                        # Parse ISO format with timezone
+                        not_before_time = datetime.fromisoformat(not_before.replace('Z', '+00:00'))
+                        # Remove timezone info to make it naive
+                        not_before_time = not_before_time.replace(tzinfo=None)
+                        if not_before_time > datetime.utcnow():
+                            logger.error("Not Before time has not passed")
+                            return None
+                    except Exception as e:
+                        logger.error(f"Error parsing not-before time: {str(e)}")
                         return None
                         
                 # Validate the address in the message matches the address in the payload
