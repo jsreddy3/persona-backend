@@ -3,6 +3,9 @@ from eth_account import Account
 from eth_account.messages import encode_defunct
 import os
 import logging
+from repositories.token_repository import TokenRedemptionRepository
+from database.models import User
+import secrets
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,21 @@ class TokenService:
             abi=self.abi
         )
     
+    def calculate_redeemable_tokens(self, user: User) -> int:
+        """
+        Calculate how many tokens a user can redeem based on chat popularity.
+        Each message sent to user's created characters is worth 10 tokens.
+        
+        Returns the redeemable amount after subtracting already redeemed tokens.
+        """
+        if not user:
+            return 0
+            
+        earned_tokens = user.character_messages_received * 10
+        redeemable = max(0, earned_tokens - user.tokens_redeemed)
+        
+        return redeemable
+    
     def create_mint_signature(self, user_address: str, amount_in_wei: int, nonce: bytes = None) -> dict:
         """
         Create a signature for minting tokens
@@ -72,3 +90,63 @@ class TokenService:
             "signature": signed_message.signature.hex(),
             "amount": amount_in_wei
         }
+    
+    def create_redemption(self, user_id: int, user_address: str, amount: int) -> dict:
+        """
+        Create a new token redemption.
+        
+        Args:
+            user_id: User's database ID
+            user_address: User's blockchain wallet address
+            amount: Amount of tokens to redeem (not in wei)
+            
+        Returns:
+            Dictionary with redemption details including signature
+        """
+        # Convert amount to wei (assuming 18 decimal places)
+        amount_in_wei = amount * 10**18
+        
+        # Generate signature data
+        signature_data = self.create_mint_signature(user_address, amount_in_wei)
+        
+        # Create redemption record in database
+        redemption = TokenRedemptionRepository.create_redemption(
+            user_id=user_id,
+            amount=amount,
+            signature=signature_data["signature"],
+            nonce=signature_data["nonce"]
+        )
+        
+        # Update user's tokens_redeemed counter
+        TokenRedemptionRepository.update_user_tokens_redeemed(user_id, amount)
+        
+        # Return redemption details for frontend
+        return {
+            "redemption_id": redemption.id,
+            "user_address": user_address,
+            "amount": amount,
+            "amount_in_wei": str(amount_in_wei),  # Convert to string to avoid JS integer issues
+            "nonce": signature_data["nonce"],
+            "signature": signature_data["signature"],
+            "contract_address": self.contract_address
+        }
+    
+    def update_redemption_status(self, redemption_id: int, status: str, transaction_hash: str = None) -> bool:
+        """
+        Update the status of a redemption
+        
+        Args:
+            redemption_id: ID of the redemption to update
+            status: New status (completed, failed)
+            transaction_hash: Optional blockchain transaction hash
+            
+        Returns:
+            True if update was successful, False otherwise
+        """
+        redemption = TokenRedemptionRepository.update_redemption_status(
+            redemption_id=redemption_id,
+            status=status,
+            transaction_hash=transaction_hash
+        )
+        
+        return redemption is not None

@@ -78,6 +78,7 @@ class User(Base):
     last_active = Column(DateTime, default=datetime.utcnow)
     photo_url = Column(String, nullable=True)
     credits_spent = Column(Integer, default=0)
+    tokens_redeemed = Column(Integer, default=0)  # Track tokens already redeemed from character_messages_received
   
     # Relationships
     created_characters = relationship("Character", back_populates="creator")
@@ -86,6 +87,7 @@ class User(Base):
     verifications = relationship("WorldIDVerification", back_populates="user")
     payments = relationship("Payment", backref="user")
     sessions = relationship("Session", back_populates="user")
+    token_redemptions = relationship("TokenRedemption", back_populates="user")
 
 class Session(Base):
     __tablename__ = "sessions"
@@ -123,6 +125,22 @@ class Payment(Base):
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class TokenRedemption(Base):
+    __tablename__ = "token_redemptions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    amount = Column(Integer, nullable=False)  # Token amount redeemed
+    signature = Column(String, nullable=False)  # The signature generated for minting
+    nonce = Column(String, nullable=False)  # Nonce used in signature generation
+    status = Column(String, default="pending")  # pending, completed, failed
+    transaction_hash = Column(String, nullable=True)  # Blockchain tx hash when completed
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    user = relationship("User", back_populates="token_redemptions")
 
 class WorldIDVerification(Base):
     __tablename__ = "world_id_verifications"
