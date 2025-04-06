@@ -275,17 +275,20 @@ class PaymentService:
                 raise Exception(f"Failed to verify transaction: {response.text}")
                 
             transaction = response.json()
-            
-            # Verify transaction details
-            if transaction.get("reference") != reference:
-                raise ValueError("Transaction reference mismatch")
+            print(f"API response for transaction: {transaction}")
         
-        # Check transaction status - use original payload status if API doesn't provide one
-        transaction_status = transaction.get("transaction_status")
+        # Verify transaction details
+        if transaction.get("reference") != reference:
+            raise ValueError("Transaction reference mismatch")
+    
+        # Check transaction status according to the documentation
+        # The documentation checks transaction.status != 'failed'
+        transaction_status = transaction.get("status")
+        
+        # If API doesn't provide status, use the one from MiniKit payload
         if transaction_status is None:
-            # If API doesn't provide status, use the one from MiniKit payload
-            transaction_status = transaction_payload.get("transaction_status")
-            print(f"Using transaction_status from MiniKit payload: {transaction_status}")
+            transaction_status = transaction_payload.get("status")
+            print(f"Using status from MiniKit payload: {transaction_status}")
         
         print(f"Transaction status to use: {transaction_status}")
         
@@ -315,8 +318,9 @@ class PaymentService:
             transaction_details=transaction_details
         )
         
-        # If transaction is mined or submitted by MiniKit, add credits to user
-        if transaction_status in ["mined", "submitted"]:
+        # If transaction status is success, add credits to user
+        # The MiniKit payload has status: 'success' when the transaction is successful
+        if transaction_status == "success":
             print(f"Adding {payment.credits_amount} credits to user {payment.user_id}")
             user = PaymentRepository.add_credits_to_user(
                 user_id=payment.user_id,
@@ -393,7 +397,7 @@ class PaymentService:
             transaction = response.json()
         
         # Get transaction status
-        transaction_status = transaction.get("transaction_status")
+        transaction_status = transaction.get("status")
         
         # Prepare transaction details
         transaction_details = {
