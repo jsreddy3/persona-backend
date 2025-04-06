@@ -281,16 +281,16 @@ class PaymentService:
         if transaction.get("reference") != reference:
             raise ValueError("Transaction reference mismatch")
     
-        # Check transaction status according to the documentation
-        # The documentation checks transaction.status != 'failed'
+        # Check transaction status from the API response
+        # We only trust the server-side verification
         transaction_status = transaction.get("status")
         
-        # If API doesn't provide status, use the one from MiniKit payload
+        # If API doesn't provide status, we can't proceed with payment
         if transaction_status is None:
-            transaction_status = transaction_payload.get("status")
-            print(f"Using status from MiniKit payload: {transaction_status}")
+            print(f"WARNING: API didn't return a transaction status. Cannot verify payment.")
+            return {"success": False, "status": "unverified", "message": "Could not verify transaction status with payment provider"}
         
-        print(f"Transaction status to use: {transaction_status}")
+        print(f"Transaction status from API: {transaction_status}")
         
         # Prepare transaction details
         transaction_details = {
@@ -319,7 +319,7 @@ class PaymentService:
         )
         
         # If transaction status is success, add credits to user
-        # The MiniKit payload has status: 'success' when the transaction is successful
+        # Only trust the server-side validation
         if transaction_status == "success":
             print(f"Adding {payment.credits_amount} credits to user {payment.user_id}")
             user = PaymentRepository.add_credits_to_user(
