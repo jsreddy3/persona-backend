@@ -305,8 +305,8 @@ class PaymentService:
             transaction_details=transaction_details
         )
         
-        # If transaction is mined, add credits to user
-        if transaction_status == "mined":
+        # If transaction is mined or submitted by MiniKit, add credits to user
+        if transaction_status in ["mined", "submitted"]:
             user = PaymentRepository.add_credits_to_user(
                 user_id=payment.user_id,
                 credits=payment.credits_amount
@@ -395,7 +395,7 @@ class PaymentService:
             )
             return {"success": False, "status": "failed", "reference": reference}
             
-        if transaction_status == "mined" and payment.status != "confirmed":
+        if transaction_status in ["mined", "submitted"] and payment.status != "confirmed":
             # Update payment status to confirmed
             PaymentRepository.update_payment_status(
                 reference=reference, 
