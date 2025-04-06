@@ -249,7 +249,15 @@ async def get_current_user_info(
     current_user: User = Depends(get_current_user)
 ):
     """Get the current user's information"""
-    return current_user
+    # Convert the SQLAlchemy model to a dict for the Pydantic model
+    return {
+        "id": current_user.id,
+        "wallet_address": current_user.wallet_address,
+        "world_id": current_user.world_id,
+        "username": current_user.username or "User",  # Provide default if null
+        "language": current_user.language or "en",    # Provide default if null
+        "credits": current_user.credits or 0          # Provide default if null
+    }
 
 @router.get("/stats", response_model=dict)
 async def get_user_stats(
