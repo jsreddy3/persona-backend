@@ -196,7 +196,7 @@ class SIWEService:
             logger.error(f"Error verifying wallet auth: {str(e)}")
             return None
             
-    def parse_siwe_message(self, message_str: str) -> Dict[str, Any]:
+    def parse_siwe_message(self, message_str: str) -> Dict[str, str]:
         """
         Parse a SIWE message string into its components
         
@@ -206,62 +206,39 @@ class SIWEService:
         Returns:
             Dictionary containing parsed SIWE message fields
         """
-        lines = message_str.split('\n')
-        if len(lines) < 7:  # Minimum required fields
-            raise ValueError("Invalid SIWE message format: too few lines")
-            
-        result = {}
+        logger.info(f"Parsing SIWE message: '{message_str}'")
         
-        # Extract domain (remove "wants you to sign in with your Ethereum account:")
-        preamble_suffix = " wants you to sign in with your Ethereum account:"
-        if preamble_suffix in lines[0]:
-            result["domain"] = lines[0].replace(preamble_suffix, "")
-        else:
-            raise ValueError("Invalid SIWE message format: missing domain preamble")
+        try:
+            lines = message_str.strip().split('\n')
+            result = {}
             
-        # Extract address (line 1)
-        result["address"] = lines[1]
-        
-        # Line 2 is typically empty
-        
-        # Extract statement if present (line 3 if it doesn't start with a tag)
-        current_line = 3
-        if current_line < len(lines) and not lines[current_line].startswith("URI:") and lines[current_line].strip():
-            result["statement"] = lines[current_line]
-            current_line += 1
-            
-        # Process remaining tagged fields
-        for i in range(current_line, len(lines)):
-            line = lines[i]
-            
-            if not line.strip():
-                continue
+            # Parse domain and address from first line
+            if len(lines) > 0:
+                first_line = lines[0]
+                if ' wants you to sign in with your Ethereum account:' in first_line:
+                    result['domain'] = first_line.split(' wants you to sign in with your Ethereum account:')[0]
+                    
+            # The second line should be the address
+            if len(lines) > 1:
+                result['address'] = lines[1].strip()
                 
-            if line.startswith("URI:"):
-                result["uri"] = line.replace("URI:", "").strip()
-            elif line.startswith("Version:"):
-                result["version"] = line.replace("Version:", "").strip()
-            elif line.startswith("Chain ID:"):
-                result["chain_id"] = line.replace("Chain ID:", "").strip()
-            elif line.startswith("Nonce:"):
-                result["nonce"] = line.replace("Nonce:", "").strip()
-            elif line.startswith("Issued At:"):
-                result["issued_at"] = line.replace("Issued At:", "").strip()
-            elif line.startswith("Expiration Time:"):
-                result["expiration_time"] = line.replace("Expiration Time:", "").strip()
-            elif line.startswith("Not Before:"):
-                result["not_before"] = line.replace("Not Before:", "").strip()
-            elif line.startswith("Request ID:"):
-                result["request_id"] = line.replace("Request ID:", "").strip()
+            # Parse remaining fields
+            for i in range(2, len(lines)):
+                line = lines[i].strip()
+                if ': ' in line:
+                    key, value = line.split(': ', 1)
+                    key = key.lower().replace(' ', '_')
+                    result[key] = value
+                else:
+                    # This line is likely the statement
+                    result['statement'] = line
             
-        # Validate required fields
-        required_fields = ["domain", "address", "uri", "version", "nonce", "issued_at"]
-        for field in required_fields:
-            if field not in result:
-                raise ValueError(f"Invalid SIWE message format: missing required field {field}")
-                
-        return result
-        
+            logger.info(f"Parsed SIWE message result: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"Error parsing SIWE message: {str(e)}")
+            return {}
+
     def get_user_by_wallet(self, db: Session, wallet_address: str) -> Optional[User]:
         """Get a user by wallet address"""
         return db.query(User).filter(User.wallet_address == wallet_address).first()
