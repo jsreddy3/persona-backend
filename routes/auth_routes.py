@@ -23,13 +23,11 @@ class WalletAuthPayload(BaseModel):
 class WalletAuthRequest(BaseModel):
     payload: WalletAuthPayload
     nonce: str
-    raw_message: Optional[str] = None
 
 class LinkWalletRequest(BaseModel):
     payload: WalletAuthPayload
     nonce: str
     world_id: str
-    raw_message: Optional[str] = None
 
 class CreateWalletUserRequest(BaseModel):
     wallet_address: str
@@ -64,7 +62,7 @@ async def wallet_auth(request: WalletAuthRequest):
     try:
         # Verify wallet auth payload
         wallet_address = siwe_service.verify_wallet_auth(
-            db, request.payload.dict(), request.nonce, request.raw_message
+            db, request.payload.dict(), request.nonce
         )
         
         if not wallet_address:
@@ -109,7 +107,7 @@ async def link_wallet(request: LinkWalletRequest):
     try:
         # Verify wallet auth payload
         wallet_address = siwe_service.verify_wallet_auth(
-            db, request.payload.dict(), request.nonce, request.raw_message
+            db, request.payload.dict(), request.nonce
         )
         
         if not wallet_address:

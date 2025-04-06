@@ -82,7 +82,7 @@ class SIWEService:
         else:
             logger.warning(f"Attempted to mark non-existent nonce {nonce[:8]}... as used")
             
-    def verify_wallet_auth(self, db: Session, payload: Dict[str, Any], nonce: str, raw_message: Optional[str] = None) -> Optional[str]:
+    def verify_wallet_auth(self, db: Session, payload: Dict[str, Any], nonce: str) -> Optional[str]:
         """
         Verify a wallet auth payload from MiniKit
         
@@ -90,60 +90,43 @@ class SIWEService:
             db: Database session
             payload: MiniKit wallet auth payload (MiniAppWalletAuthSuccessPayload)
             nonce: Expected nonce
-            raw_message: The original raw message from MiniKit (optional)
             
         Returns:
             wallet_address if validation succeeds, None otherwise
         """
         try:
-            # Extract fields from the payload
-            status = payload.get("status")
+            # First verify the nonce is valid and unused
+            if not self.verify_nonce(db, nonce):
+                logger.error(f"Invalid or expired nonce: {nonce}")
+                return None
+                
+            # Verify payload status
+            if payload.get("status") != "success":
+                logger.error(f"Payload status is not success: {payload.get('status')}")
+                return None
+                
+            # Extract message, signature, and address from payload
             message = payload.get("message")
             signature = payload.get("signature")
             address = payload.get("address")
             
-            # Check if all required fields are present
-            if not all([status, message, signature, address]):
+            if not message or not signature or not address:
                 logger.error("Missing required fields in payload")
                 return None
                 
-            # Verify status is success
-            if status != "success":
-                logger.error(f"Invalid status: {status}")
-                return None
-                
-            # Verify the nonce is valid
-            if not self.verify_nonce(db, nonce):
-                logger.error(f"Invalid nonce: {nonce}")
-                return None
-                
-            # Mark the nonce as used
-            self.use_nonce(db, nonce)
-            
-            # Use raw_message if provided, otherwise fall back to message
-            message_to_verify = raw_message if raw_message else message
-            
             try:
-                # Parse the SIWE message to validate its contents
-                # We still want to validate the message content, even if we use the raw message for verification
-                siwe_message_data = self.parse_siwe_message(message_to_verify)
+                # Parse and validate SIWE message
+                siwe_message_data = self.parse_siwe_message(message)
                 
-                # Log raw message for debugging
-                logger.info(f"Raw message from frontend: '{message_to_verify}'")
-                logger.info(f"Parsed message for validation: '{message}'")
-                
-                # Validate the nonce matches what we expect
+                # Validate nonce in message matches expected nonce
                 if siwe_message_data.get("nonce") != nonce:
-                    logger.error(f"Nonce mismatch. Expected: {nonce}, Received: {siwe_message_data.get('nonce')}")
+                    logger.error(f"Nonce mismatch. Got: {siwe_message_data.get('nonce')}, Expected: {nonce}")
                     return None
-                
-                # Validate the domain matches our expected domain
-                # In development, allow any domain
-                # In production, we would validate this is our expected domain
-                
-                # Validate the expiration time
+                    
+                # Validate expiration time
                 expiration_time = siwe_message_data.get("expiration_time")
                 if expiration_time:
+                    # Convert to offset-naive datetime for comparison with datetime.utcnow()
                     try:
                         # Parse ISO format with timezone
                         expiration = datetime.fromisoformat(expiration_time.replace('Z', '+00:00'))
@@ -172,22 +155,17 @@ class SIWEService:
                         return None
                         
                 # Validate the address in the message matches the address in the payload
-                if siwe_message_data.get("address", "").lower() != address.lower():
+                if siwe_message_data.get("address").lower() != address.lower():
                     logger.error(f"Address mismatch. Message: {siwe_message_data.get('address')}, Payload: {address}")
                     return None
                     
                 # Full production implementation with eth_account for signature verification
                 try:
-                    # Ensure the message has the proper format with parenthetical URLs
-                    # This is critical for signature verification to match what was actually signed
-                    formatted_message = self.ensure_proper_message_format(message_to_verify, siwe_message_data)
-                    
                     # Use encode_defunct to create an EIP-191 encoded message
-                    # IMPORTANT: Use the properly formatted message for verification
-                    message_object = encode_defunct(text=formatted_message)
+                    message_object = encode_defunct(text=message)
                     
                     # Debug logging
-                    logger.info(f"SIWE Message to verify: '{formatted_message}'")
+                    logger.info(f"SIWE Message to verify: '{message}'")
                     logger.info(f"Raw signature: '{signature}'")
                     
                     # Recover the address from the signature
@@ -209,6 +187,7 @@ class SIWEService:
                 
                 # If all validations pass, return the wallet address
                 return Web3.to_checksum_address(address)
+                
             except Exception as e:
                 logger.error(f"Error validating SIWE message: {str(e)}")
                 return None
@@ -259,51 +238,6 @@ class SIWEService:
         except Exception as e:
             logger.error(f"Error parsing SIWE message: {str(e)}")
             return {}
-
-    def ensure_proper_message_format(self, message_to_verify: str, siwe_message_data: Dict[str, Any]) -> str:
-        """
-        Ensure the message has the proper format with parenthetical URLs that MiniKit generates.
-        This is critical for signature verification.
-        
-        Args:
-            message_to_verify: The original message to format
-            siwe_message_data: The parsed SIWE message data
-            
-        Returns:
-            Properly formatted message string
-        """
-        # If message already has parenthetical URLs, return it as is
-        if " (" in message_to_verify:
-            return message_to_verify
-            
-        # Get the domain from parsed data
-        domain = siwe_message_data.get("domain", "")
-        if not domain:
-            return message_to_verify
-            
-        # Format: Replace the domain with domain (domain/) pattern that MiniKit generates
-        domain_pattern = f"{domain}"
-        domain_replacement = f"{domain} ({domain}/)"
-        
-        # Replace in the first line (domain) and in the URI line
-        lines = message_to_verify.split('\n')
-        if len(lines) > 0:
-            # Replace in the first line (domain wants you to sign in...)
-            lines[0] = lines[0].replace(domain_pattern, domain_replacement)
-            
-            # Find and replace in the URI line
-            for i, line in enumerate(lines):
-                if line.startswith("URI:"):
-                    uri_parts = line.split('/')
-                    if len(uri_parts) > 2:
-                        # The domain is everything up to the first slash after http(s)://
-                        uri_domain_end = line.find('/', line.find('://') + 3)
-                        if uri_domain_end > 0:
-                            uri_domain = line[:uri_domain_end]
-                            uri_replacement = f"{uri_domain} ({uri_domain}/)"
-                            lines[i] = lines[i].replace(uri_domain, uri_replacement)
-        
-        return '\n'.join(lines)
 
     def get_user_by_wallet(self, db: Session, wallet_address: str) -> Optional[User]:
         """Get a user by wallet address"""
