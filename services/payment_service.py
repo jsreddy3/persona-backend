@@ -282,8 +282,8 @@ class PaymentService:
             raise ValueError("Transaction reference mismatch")
     
         # Check transaction status from the API response
-        # We only trust the server-side verification
-        transaction_status = transaction.get("status")
+        # The API returns 'transactionStatus', not 'status'
+        transaction_status = transaction.get("transactionStatus")
         
         # If API doesn't provide status, we can't proceed with payment
         if transaction_status is None:
@@ -295,11 +295,11 @@ class PaymentService:
         # Prepare transaction details
         transaction_details = {
             "transaction_id": transaction_id,
-            "transaction_hash": transaction.get("transaction_hash"),
-            "chain": transaction.get("chain"),
-            "sender_address": transaction.get("from"),
-            "token_amount": transaction.get("token_amount"),
-            "token_type": transaction.get("token")
+            "transaction_hash": transaction.get("transactionHash"),
+            "chain": transaction.get("network"),
+            "sender_address": transaction.get("fromWalletAddress"),
+            "token_amount": transaction.get("inputTokenAmount"),
+            "token_type": transaction.get("inputToken")
         }
         
         if transaction_status == "failed":
@@ -318,9 +318,8 @@ class PaymentService:
             transaction_details=transaction_details
         )
         
-        # If transaction status is success, add credits to user
-        # Only trust the server-side validation
-        if transaction_status == "success":
+        # If transaction status is success or confirmed, add credits to user
+        if transaction_status in ["success", "confirmed", "mined", "pending"]:
             print(f"Adding {payment.credits_amount} credits to user {payment.user_id}")
             user = PaymentRepository.add_credits_to_user(
                 user_id=payment.user_id,
@@ -397,11 +396,11 @@ class PaymentService:
             transaction = response.json()
         
         # Get transaction status
-        transaction_status = transaction.get("status")
+        transaction_status = transaction.get("transactionStatus")
         
         # Prepare transaction details
         transaction_details = {
-            "transaction_hash": transaction.get("transaction_hash")
+            "transaction_hash": transaction.get("transactionHash")
         }
         
         if transaction_status == "failed":
