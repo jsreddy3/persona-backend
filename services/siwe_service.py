@@ -168,12 +168,38 @@ class SIWEService:
                     logger.info(f"SIWE Message to verify: '{message}'")
                     logger.info(f"Raw signature: '{signature}'")
                     
-                    # Recover the address from the signature
+                    # Handle signature format properly
+                    # MiniKit signature format: hex string with recovery id at end
                     if not signature.startswith('0x'):
                         signature = f"0x{signature}"
+                    
+                    # The signature might end with a recovery id: 0, 1, 27, 28 (or hex: 00, 01, 1b, 1c)
+                    # eth_account expects signatures in format where v is 0 or 1, not 27 or 28
+                    sig_bytes = bytes.fromhex(signature[2:])  # Remove 0x and convert to bytes
+                    
+                    if len(sig_bytes) == 65:  # Full signature with recovery id
+                        # Extract r, s, v from signature
+                        r = int.from_bytes(sig_bytes[:32], byteorder='big')
+                        s = int.from_bytes(sig_bytes[32:64], byteorder='big')
+                        v = sig_bytes[64]
                         
-                    recovered_address = Account.recover_message(message_object, signature=signature)
+                        # Normalize v: if it's 27 or 28, convert to 0 or 1
+                        if v >= 27:
+                            v -= 27
+                            
+                        # Recreate signature in the format expected by eth_account
+                        vrs = (v, r, s)
+                        logger.info(f"Processed signature components - v: {v}, r: {r}, s: {s}")
+                        
+                        # Use recover_message with vrs tuple format
+                        recovered_address = Account.recover_message(message_object, vrs=vrs)
+                    else:
+                        # Fallback to direct signature format - only for debugging
+                        logger.warning(f"Unexpected signature length: {len(sig_bytes)}")
+                        recovered_address = Account.recover_message(message_object, signature=signature)
+                    
                     logger.info(f"Full SIWE data: {siwe_message_data}")
+                    logger.info(f"Recovered address: {recovered_address}")
                     
                     # Compare recovered address with the one in the payload
                     if recovered_address.lower() != address.lower():
