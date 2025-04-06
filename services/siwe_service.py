@@ -125,7 +125,12 @@ class SIWEService:
             
             try:
                 # Parse the SIWE message to validate its contents
-                siwe_message_data = self.parse_siwe_message(message)
+                # We still want to validate the message content, even if we use the raw message for verification
+                siwe_message_data = self.parse_siwe_message(message_to_verify)
+                
+                # Log raw message for debugging
+                logger.info(f"Raw message from frontend: '{message_to_verify}'")
+                logger.info(f"Parsed message for validation: '{message}'")
                 
                 # Validate the nonce matches what we expect
                 if siwe_message_data.get("nonce") != nonce:
