@@ -280,9 +280,14 @@ class PaymentService:
             if transaction.get("reference") != reference:
                 raise ValueError("Transaction reference mismatch")
         
-        # Check transaction status
+        # Check transaction status - use original payload status if API doesn't provide one
         transaction_status = transaction.get("transaction_status")
-        print(f"Transaction status from API: {transaction_status}")
+        if transaction_status is None:
+            # If API doesn't provide status, use the one from MiniKit payload
+            transaction_status = transaction_payload.get("transaction_status")
+            print(f"Using transaction_status from MiniKit payload: {transaction_status}")
+        
+        print(f"Transaction status to use: {transaction_status}")
         
         # Prepare transaction details
         transaction_details = {
