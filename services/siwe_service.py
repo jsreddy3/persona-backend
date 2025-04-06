@@ -164,11 +164,16 @@ class SIWEService:
                     # Use encode_defunct to create an EIP-191 encoded message
                     message_object = encode_defunct(text=message)
                     
+                    # Debug logging
+                    logger.info(f"SIWE Message to verify: '{message}'")
+                    logger.info(f"Raw signature: '{signature}'")
+                    
                     # Recover the address from the signature
                     if not signature.startswith('0x'):
                         signature = f"0x{signature}"
                         
                     recovered_address = Account.recover_message(message_object, signature=signature)
+                    logger.info(f"Full SIWE data: {siwe_message_data}")
                     
                     # Compare recovered address with the one in the payload
                     if recovered_address.lower() != address.lower():
