@@ -95,38 +95,46 @@ class SIWEService:
             wallet_address if validation succeeds, None otherwise
         """
         try:
-            # First verify the nonce is valid and unused
-            if not self.verify_nonce(db, nonce):
-                logger.error(f"Invalid or expired nonce: {nonce}")
-                return None
-                
-            # Verify payload status
-            if payload.get("status") != "success":
-                logger.error(f"Payload status is not success: {payload.get('status')}")
-                return None
-                
-            # Extract message, signature, and address from payload
+            # Extract fields from the payload
+            status = payload.get("status")
             message = payload.get("message")
             signature = payload.get("signature")
             address = payload.get("address")
             
-            if not message or not signature or not address:
+            # Check if all required fields are present
+            if not all([status, message, signature, address]):
                 logger.error("Missing required fields in payload")
                 return None
                 
+            # Verify status is success
+            if status != "success":
+                logger.error(f"Invalid status: {status}")
+                return None
+                
+            # Verify the nonce is valid
+            if not self.verify_nonce(db, nonce):
+                logger.error(f"Invalid nonce: {nonce}")
+                return None
+                
+            # Mark the nonce as used
+            self.use_nonce(db, nonce)
+            
             try:
-                # Parse and validate SIWE message
+                # Parse the SIWE message to validate its contents
                 siwe_message_data = self.parse_siwe_message(message)
                 
-                # Validate nonce in message matches expected nonce
+                # Validate the nonce matches what we expect
                 if siwe_message_data.get("nonce") != nonce:
-                    logger.error(f"Nonce mismatch. Got: {siwe_message_data.get('nonce')}, Expected: {nonce}")
+                    logger.error(f"Nonce mismatch. Expected: {nonce}, Received: {siwe_message_data.get('nonce')}")
                     return None
-                    
-                # Validate expiration time
+                
+                # Validate the domain matches our expected domain
+                # In development, allow any domain
+                # In production, we would validate this is our expected domain
+                
+                # Validate the expiration time
                 expiration_time = siwe_message_data.get("expiration_time")
                 if expiration_time:
-                    # Convert to offset-naive datetime for comparison with datetime.utcnow()
                     try:
                         # Parse ISO format with timezone
                         expiration = datetime.fromisoformat(expiration_time.replace('Z', '+00:00'))
@@ -155,13 +163,14 @@ class SIWEService:
                         return None
                         
                 # Validate the address in the message matches the address in the payload
-                if siwe_message_data.get("address").lower() != address.lower():
+                if siwe_message_data.get("address", "").lower() != address.lower():
                     logger.error(f"Address mismatch. Message: {siwe_message_data.get('address')}, Payload: {address}")
                     return None
                     
                 # Full production implementation with eth_account for signature verification
                 try:
                     # Use encode_defunct to create an EIP-191 encoded message
+                    # IMPORTANT: Use the raw message from MiniKit directly
                     message_object = encode_defunct(text=message)
                     
                     # Debug logging
@@ -187,7 +196,6 @@ class SIWEService:
                 
                 # If all validations pass, return the wallet address
                 return Web3.to_checksum_address(address)
-                
             except Exception as e:
                 logger.error(f"Error validating SIWE message: {str(e)}")
                 return None
