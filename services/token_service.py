@@ -127,7 +127,7 @@ class TokenService:
         )
         
         # Update user's tokens_redeemed counter
-        self.token_repository.update_user_tokens_redeemed(user_id, amount)
+        # self.token_repository.update_user_tokens_redeemed(user_id, amount)
         
         # Return redemption details for frontend
         return {
