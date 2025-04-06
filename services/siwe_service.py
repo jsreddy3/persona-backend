@@ -82,7 +82,7 @@ class SIWEService:
         else:
             logger.warning(f"Attempted to mark non-existent nonce {nonce[:8]}... as used")
             
-    def verify_wallet_auth(self, db: Session, payload: Dict[str, Any], nonce: str) -> Optional[str]:
+    def verify_wallet_auth(self, db: Session, payload: Dict[str, Any], nonce: str, raw_message: Optional[str] = None) -> Optional[str]:
         """
         Verify a wallet auth payload from MiniKit
         
@@ -90,6 +90,7 @@ class SIWEService:
             db: Database session
             payload: MiniKit wallet auth payload (MiniAppWalletAuthSuccessPayload)
             nonce: Expected nonce
+            raw_message: The original raw message from MiniKit (optional)
             
         Returns:
             wallet_address if validation succeeds, None otherwise
@@ -118,6 +119,9 @@ class SIWEService:
                 
             # Mark the nonce as used
             self.use_nonce(db, nonce)
+            
+            # Use raw_message if provided, otherwise fall back to message
+            message_to_verify = raw_message if raw_message else message
             
             try:
                 # Parse the SIWE message to validate its contents
@@ -170,11 +174,11 @@ class SIWEService:
                 # Full production implementation with eth_account for signature verification
                 try:
                     # Use encode_defunct to create an EIP-191 encoded message
-                    # IMPORTANT: Use the raw message from MiniKit directly
-                    message_object = encode_defunct(text=message)
+                    # IMPORTANT: Use the raw message from MiniKit directly for verification
+                    message_object = encode_defunct(text=message_to_verify)
                     
                     # Debug logging
-                    logger.info(f"SIWE Message to verify: '{message}'")
+                    logger.info(f"SIWE Message to verify: '{message_to_verify}'")
                     logger.info(f"Raw signature: '{signature}'")
                     
                     # Recover the address from the signature
