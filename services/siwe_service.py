@@ -8,6 +8,9 @@ from web3 import Web3
 from eth_account import Account
 from eth_account.messages import encode_defunct
 import os
+from eth_utils import keccak
+from eth_account._utils.signing import sign_message_hash, to_standard_signature_bytes
+from eth_keys import KeyAPI
 
 logger = logging.getLogger(__name__)
 
@@ -202,41 +205,31 @@ class SIWEService:
                     logger.info(f"SIWE Message to verify: '{message}'")
                     logger.info(f"Raw signature: '{signature}'")
                     
-                    # Handle signature format properly
-                    # MiniKit signature format: hex string with recovery id at end
-                    if not signature.startswith('0x'):
-                        signature = f"0x{signature}"
+                    # Match MiniKit's approach exactly:
+                    # 1. Apply ERC-191 prefix manually to match their implementation
+                    ERC_191_PREFIX = "\x19Ethereum Signed Message:\n"
+                    prefixed_message = f"{ERC_191_PREFIX}{len(message)}{message}"
                     
-                    # The signature might end with a recovery id: 0, 1, 27, 28 (or hex: 00, 01, 1b, 1c)
-                    # eth_account expects signatures in format where v is 0 or 1, not 27 or 28
-                    sig_bytes = bytes.fromhex(signature[2:])  # Remove 0x and convert to bytes
+                    # 2. Hash the message using keccak256
+                    hashed_message = keccak(text=prefixed_message)
+                    logger.info(f"Hashed message: {hashed_message.hex()}")
                     
-                    if len(sig_bytes) == 65:  # Full signature with recovery id
-                        # Extract r, s, v from signature
-                        r = int.from_bytes(sig_bytes[:32], byteorder='big')
-                        s = int.from_bytes(sig_bytes[32:64], byteorder='big')
-                        v = sig_bytes[64]
-                        
-                        # Normalize v: if it's 27 or 28, convert to 0 or 1
-                        if v >= 27:
-                            v -= 27
-                            
-                        # Recreate signature in the format expected by eth_account
-                        vrs = (v, r, s)
-                        logger.info(f"Processed signature components - v: {v}, r: {r}, s: {s}")
-                        
-                        # Prepare the message according to ERC-191 format 
-                        message_object = encode_defunct(text=message)
-                        
-                        # Use recover_message with vrs tuple format
-                        recovered_address = Account.recover_message(message_object, vrs=vrs)
-                    else:
-                        # Fallback to direct signature format - only for debugging
-                        logger.warning(f"Unexpected signature length: {len(sig_bytes)}")
-                        message_object = encode_defunct(text=message)
-                        recovered_address = Account.recover_message(message_object, signature=signature)
+                    # 3. Format signature to match their approach
+                    if signature.startswith('0x'):
+                        signature = signature[2:]  # Remove 0x prefix if present
                     
-                    logger.info(f"Full SIWE data: {siwe_message_data}")
+                    # 4. Recover the signer address
+                    sig_bytes = bytes.fromhex(signature)
+                    
+                    # Convert to standard format
+                    stdSig = to_standard_signature_bytes(sig_bytes)
+                    
+                    # Recover the public key
+                    keys = KeyAPI()
+                    pk = keys.PublicKey.recover_from_msg_hash(hashed_message, stdSig)
+                    
+                    # Get the address from the public key
+                    recovered_address = pk.to_checksum_address()
                     logger.info(f"Recovered address: {recovered_address}")
                     
                     # Verify the recovered signer is authorized for the wallet address
@@ -252,7 +245,7 @@ class SIWEService:
                         return None
                     
                     try:
-                        # Initialize Web3 connection
+                        # Initialize Web3 connection - match their approach exactly
                         w3 = Web3(Web3.HTTPProvider(rpc_url))
                         if not w3.is_connected():
                             logger.error(f"Failed to connect to RPC endpoint: {rpc_url}")
@@ -262,34 +255,21 @@ class SIWEService:
                         checksum_wallet = Web3.to_checksum_address(address)
                         checksum_signer = Web3.to_checksum_address(recovered_address)
                         
-                        # Try direct address comparison first (simpler case)
-                        if checksum_wallet.lower() == checksum_signer.lower():
-                            logger.info(f"Direct address match: {checksum_wallet}")
-                            return Web3.to_checksum_address(address)
+                        # Create contract instance just like they do
+                        contract = w3.eth.contract(address=checksum_wallet, abi=SAFE_CONTRACT_ABI)
                         
-                        # If addresses don't match, verify through contract
-                        logger.info(f"Checking if {checksum_signer} is authorized for wallet {checksum_wallet}")
-                        try:
-                            # Create contract instance
-                            contract = w3.eth.contract(address=checksum_wallet, abi=SAFE_CONTRACT_ABI)
-                            
-                            # Call isOwner function
-                            is_authorized = contract.functions.isOwner(checksum_signer).call()
-                            
-                            if is_authorized:
-                                logger.info(f"Contract verification successful: {checksum_signer} is authorized for {checksum_wallet}")
-                                return Web3.to_checksum_address(address)
-                            else:
-                                logger.error(f"Contract verification failed: {checksum_signer} is not authorized for {checksum_wallet}")
-                                return None
-                        except Exception as contract_error:
-                            # Contract call may fail if the wallet is not a Safe/contract wallet
-                            logger.warning(f"Contract call failed, possibly not a Safe wallet: {str(contract_error)}")
-                            logger.warning("For non-contract wallets, direct address matching should be used.")
-                            logger.error(f"Signature verification failed. Recovered: {recovered_address}, Expected: {address}")
+                        # Call isOwner function
+                        is_authorized = contract.functions.isOwner(checksum_signer).call()
+                        
+                        if is_authorized:
+                            logger.info(f"Contract verification successful: {checksum_signer} is authorized for {checksum_wallet}")
+                            return Web3.to_checksum_address(address)
+                        else:
+                            logger.error(f"Contract verification failed: {checksum_signer} is not authorized for {checksum_wallet}")
                             return None
-                    except Exception as web3_error:
-                        logger.error(f"Web3 verification error: {str(web3_error)}")
+                    except Exception as contract_error:
+                        # Fail if contract call fails, just like MiniKit does
+                        logger.error(f"Contract call failed: {str(contract_error)}")
                         return None
                 except Exception as sig_error:
                     logger.error(f"Signature verification error: {str(sig_error)}")
