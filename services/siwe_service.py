@@ -221,16 +221,32 @@ class SIWEService:
                     # 4. Recover the signer address
                     sig_bytes = bytes.fromhex(signature)
                     
-                    # Convert to standard format
-                    stdSig = to_standard_signature_bytes(sig_bytes)
-                    
-                    # Recover the public key
-                    keys = KeyAPI()
-                    pk = keys.PublicKey.recover_from_msg_hash(hashed_message, stdSig)
-                    
-                    # Get the address from the public key
-                    recovered_address = pk.to_checksum_address()
-                    logger.info(f"Recovered address: {recovered_address}")
+                    # Need to correctly format the signature
+                    if len(sig_bytes) == 65:
+                        # Extract r, s, v from signature
+                        r = int.from_bytes(sig_bytes[:32], byteorder='big')
+                        s = int.from_bytes(sig_bytes[32:64], byteorder='big')
+                        v = sig_bytes[64]
+                        
+                        # Normalize v: if it's 27 or 28, convert to 0 or 1
+                        if v >= 27:
+                            v -= 27
+                            
+                        # KeyAPI expects a signature as a bytes object
+                        keys = KeyAPI()
+                        
+                        # First create the signature object from components
+                        sig_obj = keys.Signature(vrs=(v, r, s))
+                        
+                        # Then recover the public key
+                        pk = keys.PublicKey.recover_from_msg_hash(hashed_message, sig_obj)
+                        
+                        # Get the address from the public key
+                        recovered_address = pk.to_checksum_address()
+                        logger.info(f"Recovered address: {recovered_address}")
+                    else:
+                        logger.error(f"Invalid signature length: {len(sig_bytes)}")
+                        return None
                     
                     # Verify the recovered signer is authorized for the wallet address
                     chain_id = siwe_message_data.get("chain_id")
