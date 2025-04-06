@@ -125,45 +125,61 @@ class PaymentService:
         Returns:
             Tuple of (human_readable_amount, raw_token_amount)
         """
-        # Get the credit price from environment
-        credit_price_usd = float(os.getenv("CREDIT_PRICE_USD", "0.1"))  # Default $0.10 per credit
-        total_usd = credit_price_usd * credits
+        # Direct WLD pricing: 0.1 WLD for 10 credits (0.01 WLD per credit)
+        wld_per_credit = 0.01  # 0.1 WLD for 10 credits
         
-        try:
-            # Map to API token name
-            api_token = WORLD_API_TOKEN_MAPPING.get(token_type, token_type)
-            prices = await PaymentService.get_token_prices([token_type], ["USD"])
-            
-            # Debug print the response structure for troubleshooting
-            print(f"Token price API response: {prices}")
-            
-            if token_type not in prices["prices"]:
-                # If our internal token name is not in response, try the API token name
-                if api_token in prices["prices"]:
-                    # Use API token name to get price data
-                    token_price_data = prices["prices"][api_token]["USD"]
+        if token_type == "WLD":
+            # Direct calculation for WLD
+            token_amount = wld_per_credit * credits
+            raw_amount = PaymentService.token_to_decimals(token_amount, token_type)
+            return (token_amount, raw_amount)
+        else:
+            # For other tokens, convert based on relative price to WLD
+            try:
+                # Map to API token name
+                api_token = WORLD_API_TOKEN_MAPPING.get(token_type, token_type)
+                
+                # Get prices for both tokens
+                tokens_to_fetch = ["WLD", token_type]
+                prices = await PaymentService.get_token_prices(tokens_to_fetch, ["USD"])
+                
+                print(f"Token price API response: {prices}")
+                
+                # Get WLD price in USD
+                wld_price_data = prices["prices"]["WLD"]["USD"]
+                wld_price_raw = int(wld_price_data["amount"])
+                wld_decimals = int(wld_price_data["decimals"])
+                wld_price_usd = wld_price_raw / (10 ** wld_decimals)
+                
+                # Get selected token price in USD
+                if token_type not in prices["prices"]:
+                    # If our internal token name is not in response, try the API token name
+                    if api_token in prices["prices"]:
+                        token_price_data = prices["prices"][api_token]["USD"]
+                    else:
+                        raise ValueError(f"Token price data not found for {token_type} or {api_token}")
                 else:
-                    raise ValueError(f"Token price data not found for {token_type} or {api_token}")
-            else:
-                # Use our internal token name
-                token_price_data = prices["prices"][token_type]["USD"]
-            
-            # Calculate token amount needed
-            token_price_raw = int(token_price_data["amount"])
-            token_decimals = int(token_price_data["decimals"])
-            token_price = token_price_raw / (10 ** token_decimals)
-            
-            # Calculate the token amount needed (USD amount / token price in USD)
-            # This gives us the human-readable amount (e.g., 1.36 WLD for $1.00)
-            human_readable_amount = total_usd / token_price
-            
-            # Convert to token with decimals for blockchain
-            raw_amount = PaymentService.token_to_decimals(human_readable_amount, token_type)
-            
-            return (human_readable_amount, raw_amount)
-        except Exception as e:
-            print(f"Error calculating token amount: {str(e)}")
-            raise
+                    token_price_data = prices["prices"][token_type]["USD"]
+                
+                token_price_raw = int(token_price_data["amount"])
+                token_decimals = int(token_price_data["decimals"])
+                token_price_usd = token_price_raw / (10 ** token_decimals)
+                
+                # Calculate the token amount using WLD as benchmark
+                # First get how much WLD would be needed
+                wld_amount = wld_per_credit * credits
+                
+                # Then convert to equivalent amount in the other token
+                # Conversion rate = (token price in USD) / (WLD price in USD)
+                token_amount = wld_amount * (wld_price_usd / token_price_usd)
+                
+                # Convert to token with decimals
+                raw_amount = PaymentService.token_to_decimals(token_amount, token_type)
+                
+                return (token_amount, raw_amount)
+            except Exception as e:
+                print(f"Error calculating token amount: {str(e)}")
+                raise
     
     @staticmethod
     def initiate_payment(
