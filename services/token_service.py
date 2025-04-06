@@ -15,11 +15,20 @@ class TokenService:
         self.w3 = Web3(Web3.HTTPProvider('https://worldchain-mainnet.g.alchemy.com/public'))
         
         # Contract details
-        self.contract_address = os.getenv("TOKEN_CONTRACT_ADDRESS")
+        self.token_contract_address = os.getenv("TOKEN_CONTRACT_ADDRESS", "0x1d61D872aa0FE0bD449E6eCB2A2B4106B7B6f99D")
         self.signer_private_key = os.getenv("TOKEN_SIGNER_PRIVATE_KEY")
         
-        if not self.contract_address or not self.signer_private_key:
-            raise ValueError("TOKEN_CONTRACT_ADDRESS and TOKEN_SIGNER_PRIVATE_KEY must be set")
+        if not self.token_contract_address:
+            logger.error("TOKEN_CONTRACT_ADDRESS not set, using default")
+        
+        if not self.signer_private_key:
+            logger.error("TOKEN_SIGNER_PRIVATE_KEY not set")
+            # Generate a temporary key for development if needed
+            self.signer_private_key = os.getenv("TOKEN_SIGNER_PRIVATE_KEY", "0x" + secrets.token_hex(32))
+            logger.warning("Using temporary private key for development")
+        
+        # Initialize repository
+        self.token_repository = TokenRedemptionRepository()
         
         # Minimal ABI for minting and checking balance
         self.abi = [
@@ -38,7 +47,7 @@ class TokenService:
         
         # Create contract instance
         self.contract = self.w3.eth.contract(
-            address=self.contract_address,
+            address=self.token_contract_address,
             abi=self.abi
         )
     
@@ -110,7 +119,7 @@ class TokenService:
         signature_data = self.create_mint_signature(user_address, amount_in_wei)
         
         # Create redemption record in database
-        redemption = TokenRedemptionRepository.create_redemption(
+        redemption = self.token_repository.create_redemption(
             user_id=user_id,
             amount=amount,
             signature=signature_data["signature"],
@@ -118,7 +127,7 @@ class TokenService:
         )
         
         # Update user's tokens_redeemed counter
-        TokenRedemptionRepository.update_user_tokens_redeemed(user_id, amount)
+        self.token_repository.update_user_tokens_redeemed(user_id, amount)
         
         # Return redemption details for frontend
         return {
@@ -128,7 +137,7 @@ class TokenService:
             "amount_in_wei": str(amount_in_wei),  # Convert to string to avoid JS integer issues
             "nonce": signature_data["nonce"],
             "signature": signature_data["signature"],
-            "contract_address": self.contract_address
+            "contract_address": self.token_contract_address
         }
     
     def update_redemption_status(self, redemption_id: int, status: str, transaction_hash: str = None) -> bool:
@@ -143,10 +152,8 @@ class TokenService:
         Returns:
             True if update was successful, False otherwise
         """
-        redemption = TokenRedemptionRepository.update_redemption_status(
+        return self.token_repository.update_redemption_status(
             redemption_id=redemption_id,
             status=status,
             transaction_hash=transaction_hash
         )
-        
-        return redemption is not None
