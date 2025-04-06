@@ -39,8 +39,8 @@ SAFE_CONTRACT_ABI = [
 
 # RPC endpoints for different chains
 CHAIN_RPC_URLS = {
-    # Chain ID 480 is Optimism Sepolia
-    '480': os.getenv('OPTIMISM_SEPOLIA_RPC_URL', 'https://sepolia.optimism.io'),
+    # Chain ID 480 is Optimism Sepolia - Update to match MiniKit's Alchemy endpoint
+    '480': os.getenv('OPTIMISM_SEPOLIA_RPC_URL', 'https://worldchain-mainnet.g.alchemy.com/public'),
     # Can add more chains as needed
     '1': 'https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161',  # Ethereum mainnet
     '10': 'https://mainnet.optimism.io',  # Optimism mainnet
