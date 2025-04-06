@@ -268,7 +268,7 @@ async def get_user_stats(
     try:
         return {
             "credits_used": current_user.credits_spent,
-            "messages_sent": current_user.messages_sent,
+            "messages_sent": current_user.character_messages_received,
             "characters": len(current_user.created_characters),
             "username": current_user.username,
             "character_messages_received": current_user.character_messages_received
