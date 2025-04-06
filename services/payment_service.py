@@ -240,6 +240,9 @@ class PaymentService:
         Returns:
             Dictionary with verification results
         """
+        # Add debug logging
+        print(f"Transaction payload received: {transaction_payload}")
+        
         # Get payment record using repository
         payment = PaymentRepository.get_payment_by_reference(reference)
         
@@ -252,6 +255,7 @@ class PaymentService:
         # Get transaction ID from payload
         transaction_id = transaction_payload.get("transaction_id")
         if not transaction_id:
+            print("ERROR: Missing transaction_id in payload!")
             raise ValueError("Missing transaction ID in payload")
         
         # Verify with World ID API
@@ -278,6 +282,7 @@ class PaymentService:
         
         # Check transaction status
         transaction_status = transaction.get("transaction_status")
+        print(f"Transaction status from API: {transaction_status}")
         
         # Prepare transaction details
         transaction_details = {
@@ -307,17 +312,21 @@ class PaymentService:
         
         # If transaction is mined or submitted by MiniKit, add credits to user
         if transaction_status in ["mined", "submitted"]:
+            print(f"Adding {payment.credits_amount} credits to user {payment.user_id}")
             user = PaymentRepository.add_credits_to_user(
                 user_id=payment.user_id,
                 credits=payment.credits_amount
             )
             
             if user:
+                print(f"User credits updated. New balance: {user.credits}")
                 return {
                     "success": True, 
                     "status": "confirmed", 
                     "credits": user.credits
                 }
+            else:
+                print(f"Failed to update user credits!")
         
         # Still pending
         return {"success": True, "status": "pending"}
