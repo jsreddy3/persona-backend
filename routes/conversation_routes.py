@@ -238,6 +238,10 @@ async def stream_message(
             if conversation.creator_id != user_id and user_id not in [p.id for p in conversation.participants]:
                 raise ValueError("User does not have access to this conversation")
             
+            # Get the character and its creator ID for later use
+            character = conversation.character
+            character_creator_id = character.creator_id
+            
             # Check user credits
             user = temp_service.user_repository.get_by_id(user_id)
             if user.credits < 1:
@@ -306,6 +310,13 @@ async def stream_message(
                     # Deduct credit
                     user = update_service.user_repository.get_by_id(user_id)
                     user.credits -= 1
+                    
+                    # Increment the character creator's message received counter
+                    # Only if the message sender is not the character creator
+                    if user_id != character_creator_id:
+                        character_creator = update_service.user_repository.get_by_id(character_creator_id)
+                        character_creator.character_messages_received += 1
+                    
                     db_update.commit()
                 except Exception as db_error:
                     db_update.rollback()

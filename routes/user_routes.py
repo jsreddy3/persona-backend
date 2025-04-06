@@ -229,7 +229,8 @@ async def get_user_stats(
             "credits": current_user.credits,
             "conversations": total_conversations,
             "characters": len(current_user.created_characters),
-            "username": current_user.username
+            "username": current_user.username,
+            "character_messages_received": current_user.character_messages_received
         }
     except Exception as e:
         logger.error(f"Error getting user stats: {str(e)}")

@@ -71,6 +71,7 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=True)    # Optional
     language = Column(String, default="en")  # Default language
     credits = Column(Integer, default=100)
+    character_messages_received = Column(Integer, default=0)  # Counter for messages sent to user's created characters
     wallet_address = Column(String, unique=True, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
