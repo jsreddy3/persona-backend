@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Response, Request
-from typing import Dict
+from fastapi.encoders import jsonable_encoder
+from typing import Dict, Optional
 import httpx
 import os
 import logging
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 @router.post("/audio")
 async def transcribe_audio(
     request: Request,
-    audio: UploadFile = File(...),
+    audio: Optional[UploadFile] = None,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -25,6 +26,11 @@ async def transcribe_audio(
         # Log request information for debugging
         logger.info(f"Transcription request received: content_type={request.headers.get('content-type')}")
         
+        # Check if we have a valid audio file
+        if not audio:
+            logger.error("No audio file received in request")
+            return {"transcript": "", "error": "No audio file received"}
+            
         # Get API key from environment
         api_key = os.getenv("DEEPGRAM_API_KEY")
         if not api_key:
