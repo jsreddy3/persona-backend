@@ -14,6 +14,7 @@ from routes import (
 )
 from routes import new_admin_routes  # New optimized admin routes
 from routes import auth_routes  # New wallet auth routes
+from routes import transcription_routes  # New transcription routes
 from middleware import TimingMiddleware
 from database.init_db import init_db
 import logging
@@ -62,6 +63,7 @@ app.include_router(timing_routes.router, prefix=f"{api_prefix}/timing", tags=["t
 app.include_router(auth_routes.router, prefix=f"{api_prefix}/auth", tags=["auth"])  # New wallet auth routes
 # app.include_router(admin_routes.router, prefix=f"{api_prefix}/admin", tags=["admin"])  # Original admin routes
 app.include_router(new_admin_routes.router, prefix=f"{api_prefix}/admin", tags=["admin"])  # New optimized admin routes
+app.include_router(transcription_routes.router, prefix=f"{api_prefix}/transcription", tags=["transcription"])  # New transcription routes
 
 # Print all registered routes for debugging
 for route in app.routes:
