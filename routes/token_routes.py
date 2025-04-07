@@ -41,7 +41,7 @@ async def get_redeemable_tokens(
         redeemable_tokens = token_service.calculate_redeemable_tokens(current_user)
         
         # Get total earned tokens
-        total_earned = current_user.character_messages_received * 10
+        total_earned = current_user.character_messages_received * 1000
         
         return {
             "redeemable_tokens": redeemable_tokens,
