@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Response
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Response, Request
 from typing import Dict
 import httpx
 import os
@@ -6,12 +6,14 @@ import logging
 from datetime import datetime
 from dependencies.auth import get_current_user
 from database.models import User
+from database.database import SessionLocal
 
 router = APIRouter(tags=["transcription"])
 logger = logging.getLogger(__name__)
 
 @router.post("/audio")
 async def transcribe_audio(
+    request: Request,
     audio: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
 ):
@@ -20,6 +22,9 @@ async def transcribe_audio(
     Returns an empty transcript if transcription fails rather than throwing an error
     """
     try:
+        # Log request information for debugging
+        logger.info(f"Transcription request received: content_type={request.headers.get('content-type')}")
+        
         # Get API key from environment
         api_key = os.getenv("DEEPGRAM_API_KEY")
         if not api_key:
@@ -35,13 +40,18 @@ async def transcribe_audio(
             logger.warning(f"Unexpected content type: {content_type}, proceeding anyway")
         
         # Read audio file content
-        audio_data = await audio.read()
-        if not audio_data:
-            logger.warning("Empty audio file received")
+        try:
+            audio_data = await audio.read()
+            if not audio_data:
+                logger.warning("Empty audio file received")
+                return {"transcript": ""}
+            
+            # Log the audio size
+            logger.info(f"Received audio file: {len(audio_data)} bytes from user ID {current_user.id}")
+            
+        except Exception as file_error:
+            logger.error(f"Error reading audio file: {str(file_error)}")
             return {"transcript": ""}
-        
-        # Log the audio size
-        logger.info(f"Received audio file: {len(audio_data)} bytes from user ID {current_user.id}")
         
         # Call Deepgram API
         async with httpx.AsyncClient() as client:
