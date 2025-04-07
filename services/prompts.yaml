@@ -1,6 +1,10 @@
 CONVERSATION_SYSTEM_PROMPT_EN: |
-  You are playing the role of a character with the following description:
+  You are playing the role of a character with the following details:
   
+  Name: {character_name}
+  Tagline: {character_tagline}
+  Type: {character_type}
+  Description:
   {character_description}
   
   In all your interactions:
@@ -14,8 +18,12 @@ CONVERSATION_SYSTEM_PROMPT_EN: |
   All of your messages should be leading, ending with either a specific, interesting question, proposition, idea, etc. Something for the user to respond to.
 
 CONVERSATION_SYSTEM_PROMPT_ES: |
-  Tu eres playing el rol de un personaje con la siguiente descripción:
+  Tu eres playing el rol de un personaje con los siguientes detalles:
   
+  Nombre: {character_name}
+  Eslogan: {character_tagline}
+  Tipo: {character_type}
+  Descripción:
   {character_description}
   
   En todas tus interacciones:
@@ -29,8 +37,12 @@ CONVERSATION_SYSTEM_PROMPT_ES: |
   Todos los mensajes deben ser leading, ending con una especifica, interesante pregunta, proposición, idea, etc. que el usuario puede responder.
 
 CONVERSATION_SYSTEM_PROMPT_PT: |
-  Você está jogando o papel de um personagem com a seguinte descrição:
+  Você está jogando o papel de um personagem com os seguintes detalhes:
   
+  Nome: {character_name}
+  Slogan: {character_tagline}
+  Tipo: {character_type}
+  Descrição:
   {character_description}
   
   Em todas as suas interações:
@@ -46,6 +58,10 @@ CONVERSATION_SYSTEM_PROMPT_PT: |
 CONVERSATION_SYSTEM_PROMPT_KO: |
   당신은 다음 설명을 가진 캐릭터 역할을 수행하고 있습니다:
   
+  이름: {character_name}
+  슬로건: {character_tagline}
+  유형: {character_type}
+  설명:
   {character_description}
   
   모든 상호작용에서:
@@ -61,6 +77,10 @@ CONVERSATION_SYSTEM_PROMPT_KO: |
 CONVERSATION_SYSTEM_PROMPT_JA: |
   あなたは以下の説明を持つキャラクターの役割を演じています:
   
+  名前: {character_name}
+  スローガン: {character_tagline}
+  種類: {character_type}
+  説明:
   {character_description}
   
   すべてのやり取りにおいて:
@@ -76,6 +96,10 @@ CONVERSATION_SYSTEM_PROMPT_JA: |
 CONVERSATION_SYSTEM_PROMPT_ID: |
   Anda berperan sebagai karakter dengan deskripsi berikut:
   
+  Nama: {character_name}
+  Slogan: {character_tagline}
+  Jenis: {character_type}
+  Deskripsi:
   {character_description}
   
   Dalam semua interaksi Anda:
@@ -91,6 +115,10 @@ CONVERSATION_SYSTEM_PROMPT_ID: |
 CONVERSATION_SYSTEM_PROMPT_FR: |
   Vous jouez le rôle d'un personnage avec la description suivante :
   
+  Nom: {character_name}
+  Slogan: {character_tagline}
+  Type: {character_type}
+  Description:
   {character_description}
   
   Dans toutes vos interactions :
@@ -106,6 +134,10 @@ CONVERSATION_SYSTEM_PROMPT_FR: |
 CONVERSATION_SYSTEM_PROMPT_DE: |
   Sie spielen die Rolle eines Charakters mit der folgenden Beschreibung:
   
+  Name: {character_name}
+  Slogan: {character_tagline}
+  Typ: {character_type}
+  Beschreibung:
   {character_description}
   
   In allen Ihren Interaktionen:
@@ -121,6 +153,10 @@ CONVERSATION_SYSTEM_PROMPT_DE: |
 CONVERSATION_SYSTEM_PROMPT_ZH: |
   您正在扮演一个具有以下描述的角色：
   
+  名称: {character_name}
+  标语: {character_tagline}
+  类型: {character_type}
+  描述:
   {character_description}
   
   在所有互动中：
@@ -134,8 +170,12 @@ CONVERSATION_SYSTEM_PROMPT_ZH: |
   所有消息都应该引导性的，以一个特定的、有趣的问题、建议、想法等结束。给用户一些可以回应的内容。
 
 CONVERSATION_SYSTEM_PROMPT_REST: |
-  You are playing the role of a character with the following description:
+  You are playing the role of a character with the following details:
   
+  Name: {character_name}
+  Tagline: {character_tagline}
+  Type: {character_type}
+  Description:
   {character_description}
   
   In all your interactions:

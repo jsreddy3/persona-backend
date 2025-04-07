@@ -60,6 +60,9 @@ class ConversationService:
         # Get system prompt template based on language
         logger.info(f"Creating conversation with language: {language}")
         
+        # Get character type as string (if multiple, use the first one)
+        character_type = character.character_types[0] if character.character_types else "fictional_character"
+        
         if language in self.supported_languages:
             prompt_key = f"CONVERSATION_SYSTEM_PROMPT_{language.upper()}"
             system_prompt = self.prompts.get(prompt_key)
@@ -67,17 +70,28 @@ class ConversationService:
             # If prompt exists for this language, use it
             if system_prompt:
                 logger.info(f"Using specific prompt for language: {language}")
-                system_prompt = system_prompt.format(character_description=character.character_description)
+                system_prompt = system_prompt.format(
+                    character_name=character.name,
+                    character_tagline=character.tagline,
+                    character_type=character_type,
+                    character_description=character.character_description
+                )
             else:
                 # This shouldn't happen if the YAML is properly configured
                 logger.warning(f"Prompt key {prompt_key} not found despite language being supported")
                 system_prompt = self.prompts["CONVERSATION_SYSTEM_PROMPT_EN"].format(
+                    character_name=character.name,
+                    character_tagline=character.tagline,
+                    character_type=character_type,
                     character_description=character.character_description
                 )
         else:
             # Fallback for unsupported languages
             logger.info(f"Using fallback prompt for unsupported language: {language}")
             system_prompt = self.prompts["CONVERSATION_SYSTEM_PROMPT_REST"].format(
+                character_name=character.name,
+                character_tagline=character.tagline,
+                character_type=character_type,
                 character_description=character.character_description, 
                 language=language
             )
