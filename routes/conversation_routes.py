@@ -312,10 +312,8 @@ async def stream_message(
                     user.credits -= 1
                     
                     # Increment the character creator's message received counter
-                    # Only if the message sender is not the character creator
-                    if user_id != character_creator_id:
-                        character_creator = update_service.user_repository.get_by_id(character_creator_id)
-                        character_creator.character_messages_received += 1
+                    character_creator = update_service.user_repository.get_by_id(character_creator_id)
+                    character_creator.character_messages_received += 1
                     
                     db_update.commit()
                 except Exception as db_error:
