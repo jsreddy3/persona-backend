@@ -119,7 +119,7 @@ async def update_redemption_status(
             status=status_update.status,
             transaction_hash=status_update.transaction_hash
         )
-        
+
         if not success:
             raise HTTPException(
                 status_code=404,
