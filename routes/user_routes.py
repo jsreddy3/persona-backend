@@ -271,7 +271,8 @@ async def get_user_stats(
             "messages_sent": current_user.character_messages_received,
             "characters": len(current_user.created_characters),
             "username": current_user.username,
-            "character_messages_received": current_user.character_messages_received
+            "character_messages_received": current_user.character_messages_received,
+            "tokens_redeemed": current_user.tokens_redeemed
         }
     except Exception as e:
         logger.error(f"Error getting user stats: {str(e)}")

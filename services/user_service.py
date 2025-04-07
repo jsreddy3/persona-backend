@@ -27,6 +27,7 @@ class UserService:
         """
         Get comprehensive user statistics including:
         - Total credits
+        - Tokens redeemed and messages received (for token calculations)
         - All characters created with their stats
         - Total messages across all characters
         - Average character rating
@@ -51,6 +52,8 @@ class UserService:
         return {
             "user_id": user.id,
             "credits_remaining": user.credits,
+            "tokens_redeemed": user.tokens_redeemed,
+            "character_messages_received": user.character_messages_received,
             "total_characters": len(characters_stats),
             "total_messages": total_messages,
             "average_character_rating": round(avg_rating, 2),
