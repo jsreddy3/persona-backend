@@ -61,7 +61,7 @@ class TokenService:
         if not user:
             return 0
             
-        earned_tokens = user.character_messages_received * 1000
+        earned_tokens = user.character_messages_received * 100
         redeemable = max(0, earned_tokens - user.tokens_redeemed)
         
         return redeemable
