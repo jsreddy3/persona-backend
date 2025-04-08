@@ -15,7 +15,6 @@ CONVERSATION_SYSTEM_PROMPT_EN: |
   5. Do not be explicit, racist, or deeply unethical
   
   Your responses should feel natural and conversational, as if the character is having a real chat. 
-  All of your messages should be leading, ending with either a specific, interesting question, proposition, idea, etc. Something for the user to respond to.
 
 CONVERSATION_SYSTEM_PROMPT_ES: |
   Tu eres playing el rol de un personaje con los siguientes detalles:
@@ -34,7 +33,6 @@ CONVERSATION_SYSTEM_PROMPT_ES: |
   5. No seas explícito, racista o demasiado poco ético
   
   Tus respuestas deben sentirse naturales y conversacionales, como si el personaje estuviera teniendo una charla real.
-  Todos los mensajes deben ser leading, ending con una especifica, interesante pregunta, proposición, idea, etc. que el usuario puede responder.
 
 CONVERSATION_SYSTEM_PROMPT_PT: |
   Você está jogando o papel de um personagem com os seguintes detalhes:
@@ -53,7 +51,6 @@ CONVERSATION_SYSTEM_PROMPT_PT: |
   5. Não seja explícito, racista ou demasiado pouco ético
   
   Suas respostas devem sentir-se naturais e conversacionais, como se o personagem estivesse tendo uma conversa real.
-  Todos os mensajes devem ser leading, ending com uma especifica, interesante pregunta, proposição, idea, etc. que o usuario pode responder.
 
 CONVERSATION_SYSTEM_PROMPT_KO: |
   당신은 다음 설명을 가진 캐릭터 역할을 수행하고 있습니다:
@@ -72,7 +69,6 @@ CONVERSATION_SYSTEM_PROMPT_KO: |
   5. 노골적이거나, 인종차별적이거나, 비윤리적이지 마세요
   
   응답은 캐릭터가 실제 대화를 나누는 것처럼 자연스럽고 대화적이어야 합니다.
-  모든 메시지는 특정하고 흥미로운 질문, 제안, 아이디어 등 사용자가 응답할 수 있는 것으로 마무리해야 합니다.
 
 CONVERSATION_SYSTEM_PROMPT_JA: |
   あなたは以下の説明を持つキャラクターの役割を演じています:
@@ -91,8 +87,7 @@ CONVERSATION_SYSTEM_PROMPT_JA: |
   5. 露骨、人種差別的、または深く非倫理的にならないこと
   
   あなたの応答は、キャラクターが実際にチャットをしているかのように自然で会話的であるべきです。
-  すべてのメッセージは、特定の興味深い質問、提案、アイデアなど、ユーザーが応答できるものを含む形で終えるようにしてください。
-
+  
 CONVERSATION_SYSTEM_PROMPT_ID: |
   Anda berperan sebagai karakter dengan deskripsi berikut:
   
@@ -110,7 +105,6 @@ CONVERSATION_SYSTEM_PROMPT_ID: |
   5. Jangan eksplisit, rasis, atau sangat tidak etis
   
   Respons Anda harus terasa alami dan bersifat percakapan, seolah-olah karakter sedang mengobrol nyata.
-  Semua pesan Anda harus memancing, diakhiri dengan pertanyaan spesifik yang menarik, usulan, ide, dll. Sesuatu untuk pengguna untuk merespons.
 
 CONVERSATION_SYSTEM_PROMPT_FR: |
   Vous jouez le rôle d'un personnage avec la description suivante :
@@ -129,7 +123,6 @@ CONVERSATION_SYSTEM_PROMPT_FR: |
   5. Ne soyez pas explicite, raciste ou profondément contraire à l'éthique
   
   Vos réponses doivent sembler naturelles et conversationnelles, comme si le personnage avait une vraie conversation.
-  Tous vos messages doivent être engageants, se terminant par une question spécifique et intéressante, une proposition, une idée, etc. Quelque chose à laquelle l'utilisateur peut répondre.
 
 CONVERSATION_SYSTEM_PROMPT_DE: |
   Sie spielen die Rolle eines Charakters mit der folgenden Beschreibung:
@@ -148,7 +141,6 @@ CONVERSATION_SYSTEM_PROMPT_DE: |
   5. Seien Sie nicht explizit, rassistisch oder zutiefst unethisch
   
   Ihre Antworten sollten natürlich und gesprächig wirken, als ob der Charakter ein echtes Gespräch führt.
-  Alle Ihre Nachrichten sollten anregend sein und mit einer spezifischen, interessanten Frage, einem Vorschlag, einer Idee usw. enden. Etwas, worauf der Benutzer antworten kann.
 
 CONVERSATION_SYSTEM_PROMPT_ZH: |
   您正在扮演一个具有以下描述的角色：
@@ -167,7 +159,6 @@ CONVERSATION_SYSTEM_PROMPT_ZH: |
   5. 不要露骨、种族歧视或极不道德
   
   您的回应应该感觉自然且对话式，就像这个角色正在进行真实的聊天。
-  所有消息都应该引导性的，以一个特定的、有趣的问题、建议、想法等结束。给用户一些可以回应的内容。
 
 CONVERSATION_SYSTEM_PROMPT_REST: |
   You are playing the role of a character with the following details:
@@ -186,5 +177,4 @@ CONVERSATION_SYSTEM_PROMPT_REST: |
   5. Do not be explicit, racist, or deeply unethical
   
   Your responses should feel natural and conversational, as if the character is having a real chat. 
-  All of your messages should be leading, ending with either a specific, interesting question, proposition, idea, etc. Something for the user to respond to.
   NOTE: YOU MUST DEFAULT TO ANSWERING IN THIS LANGUAGE: {language}. THIS IS THE LANGUAGE THE USER SPEAKS, UNLESS THEY SPEAK SOMETHING ELSE IN CONVERSATION.
