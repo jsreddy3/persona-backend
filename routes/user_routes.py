@@ -372,7 +372,7 @@ async def get_user_stats(
             # Build response using denormalized counters for O(1) performance
             stats = {
                 "credits_used": user.credits_spent or 0,
-                "messages_sent": user.messages_sent or 0,
+                "messages_sent": user.character_messages_received or 0,  # Using the correct field
                 "characters": character_count,
                 "username": user.username,
                 "character_messages_received": user.character_messages_received or 0,
