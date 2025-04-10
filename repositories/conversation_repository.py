@@ -75,9 +75,7 @@ class ConversationRepository(BaseRepository[Conversation]):
                 )
             )\
             .filter(
-                Conversation.creator_id == user_id,
-                # Filter out deleted conversations if applicable
-                Conversation.deleted_at.is_(None)
+                Conversation.creator_id == user_id
             )\
             .order_by(
                 Conversation.last_chatted_with.desc().nullsfirst(), 
