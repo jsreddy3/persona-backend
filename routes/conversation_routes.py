@@ -228,40 +228,15 @@ async def get_conversation_messages(
 
 @router.get("/", response_model=List[ConversationResponse])
 async def get_conversations(
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get all conversations for the current user with character details
-    
-    Optimized for global distribution with reduced database roundtrips"""
+    """Get all conversations for the current user with character details"""
     try:
-        user_id = current_user.id
-        
-        # Use a single short-lived database connection
-        db = next(get_db())
-        try:
-            service = ConversationService(db)
-            
-            # Use a more efficient query to get only the necessary data
-            conversations = service.get_conversations_with_characters(user_id)
-            
-            # Detach the objects from the session to avoid serialization issues
-            # This allows the session to be closed earlier
-            detached_convos = []
-            for convo in conversations:
-                # Add message preview if not already present
-                if not convo.message_preview and hasattr(convo, 'messages') and convo.messages:
-                    last_message = next((m for m in convo.messages if m.role == 'assistant'), None)
-                    if last_message:
-                        preview = last_message.content[:50] + ("..." if len(last_message.content) > 50 else "")
-                        convo.message_preview = preview
-                
-                # Make a copy to detach from session
-                db.expunge(convo)
-            
-            return conversations
-        finally:
-            # Ensure connection is closed
-            db.close()
+        # logger.info(f"Getting conversations for user {current_user.id} (email: {current_user.email})")
+        service = ConversationService(db)
+        conversations = service.get_conversations_with_characters(current_user.id)
+        return conversations
     except Exception as e:
         logger.error(f"Error getting conversations: {str(e)}")
         logger.exception("Full traceback:")

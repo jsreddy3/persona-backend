@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session, joinedload, subqueryload
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from .base import BaseRepository
 from database.models import Conversation, Message, Character
@@ -58,28 +58,10 @@ class ConversationRepository(BaseRepository[Conversation]):
 
     def get_by_user_id_with_characters(self, user_id: int):
         """Get all conversations for a user with character details included"""
-        # More efficient query that explicitly selects only what's needed
-        # and prefetches the last message for each conversation
         return self.db.query(Conversation)\
-            .options(
-                # Only load necessary character fields
-                joinedload(Conversation.character).load_only(
-                    "id", "name", "photo_url", "tagline", "character_description"
-                ),
-                # Fetch latest message for preview
-                subqueryload(Conversation.messages).options(
-                    load_only("content", "role")
-                ).order_by(Message.created_at.desc()).limit(1)
-            )\
-            .filter(
-                Conversation.creator_id == user_id,
-                # Filter out deleted conversations if applicable
-                Conversation.deleted_at.is_(None)
-            )\
-            .order_by(
-                Conversation.last_chatted_with.desc().nullsfirst(), 
-                Conversation.created_at.desc()
-            )\
+            .options(joinedload(Conversation.character))\
+            .filter(Conversation.creator_id == user_id)\
+            .order_by(Conversation.last_chatted_with.desc().nullsfirst(), Conversation.created_at.desc())\
             .all()
 
     def update_message(self, message_id: int, content: str) -> Optional[Message]:
