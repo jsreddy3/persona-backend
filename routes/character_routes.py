@@ -232,9 +232,9 @@ async def create_character(
             tagline=character_data.get("tagline")
         )
         
-        if not moderation_result.approved:
+        if not moderation_result["approved"]:
             # Failed moderation check
-            raise ValueError(f"Character content violates content policy: {moderation_result.reason}")
+            raise ValueError(f"Character content violates content policy: {moderation_result['reason']}")
 
         # STEP 3: Create the character in the database with all data
         db_create = next(get_db())
@@ -255,22 +255,8 @@ async def create_character(
                 character_types=character_data["character_types"]
             )
             
-            # Generate a system message using our language-specific attributes
-            attributes_list = all_attributes.get(language, all_attributes["en"])
-            character_attributes = character.attributes or random.sample(attributes_list, 3)
-            
-            # Set system message using character data and generated details
-            system_message = f"""You are {character.name}. {character.character_description}
-            
-Your traits are: {', '.join(character_attributes)}
-
-Additional guidelines:
-- Stay true to your character description
-- Be conversational and engaging
-- Keep your messages concise"""
-
-            # Add the system message in the same transaction
-            create_service.repository.update_system_message(character_model.id, system_message)
+            # Note: System messages are generated and stored at conversation creation time
+            # not at character creation time
             
             # Commit all changes in one transaction
             db_create.commit()
