@@ -232,9 +232,9 @@ async def create_character(
             tagline=character_data.get("tagline")
         )
         
-        if not moderation_result["approved"]:
+        if not moderation_result.approved:
             # Failed moderation check
-            raise ValueError(f"Character content violates content policy: {moderation_result['reason']}")
+            raise ValueError(f"Character content violates content policy: {moderation_result.reason}")
 
         # STEP 3: Create the character in the database with all data
         db_create = next(get_db())
