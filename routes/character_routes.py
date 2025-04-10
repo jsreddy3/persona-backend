@@ -225,12 +225,12 @@ async def create_character(
         
         # STEP 2: Perform moderation check without holding a DB connection
         # This is an external API call that could take time
-        moderation_result = await moderation_service.check_content([
-            character_data["name"],
-            character_data["description"],
-            character_data["greeting"],
-            character_data["tagline"]
-        ])
+        moderation_result = await moderation_service.moderate_character(
+            name=character_data["name"],
+            character_description=character_data["description"],
+            greeting=character_data["greeting"],
+            tagline=character_data.get("tagline")
+        )
         
         if not moderation_result["approved"]:
             # Failed moderation check
