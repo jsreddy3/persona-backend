@@ -69,10 +69,10 @@ class ConversationRepository(BaseRepository[Conversation]):
                     Character.id, Character.name, Character.photo_url, 
                     Character.tagline, Character.character_description
                 ),
-                # Fetch latest message for preview
-                subqueryload(Conversation.messages).options(
-                    load_only(Message.content, Message.role)
-                ).order_by(Message.created_at.desc()).limit(1)
+                # Fetch messages for preview - don't try to order within the loading options
+                subqueryload(Conversation.messages).load_only(
+                    Message.content, Message.role, Message.created_at
+                )
             )\
             .filter(
                 Conversation.creator_id == user_id,

@@ -268,9 +268,6 @@ Additional guidelines:
 - Stay true to your character description
 - Be conversational and engaging
 - Keep your messages concise"""
-
-            # Add the system message in the same transaction
-            create_service.repository.update_system_message(character_model.id, system_message)
             
             # Commit all changes in one transaction
             db_create.commit()
