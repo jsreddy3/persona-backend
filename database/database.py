@@ -24,11 +24,12 @@ if DATABASE_URL:
         pool_timeout=30,           # Wait up to 30 seconds for a connection
         pool_recycle=1800,         # Recycle connections older than 30 minutes
         pool_pre_ping=True,        # Verify connections are still active before using
-        connect_args={             # Connection args for better global distribution
-            "tcp_keepalive": True,  # Keep connections alive
-            "keepalives_idle": 60,  # Seconds before sending keepalive probes
-            "keepalives_interval": 10,  # Seconds between keepalive probes
-            "keepalives_count": 5   # Number of probes before giving up
+        # Use proper psycopg2 keepalive parameters
+        connect_args={
+            "keepalives": 1,              # Enable keepalives
+            "keepalives_idle": 60,        # Seconds before sending keepalive probes
+            "keepalives_interval": 10,    # Seconds between keepalive probes  
+            "keepalives_count": 5         # Number of probes before giving up
         } if "postgresql" in DATABASE_URL else {},  # Only apply these for PostgreSQL
         isolation_level="READ COMMITTED"  # Explicit isolation level for better concurrency
     )
