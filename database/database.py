@@ -9,6 +9,11 @@ logger = logging.getLogger(__name__)
 # Get database URL from environment variable
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+# Ensure we're using the correct dialect name (postgresql, not postgres)
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    logger.info("Converted postgres:// URL to postgresql://")
+
 # Create SQLAlchemy engine with connection pooling optimized for distributed deployments
 if DATABASE_URL:
     # For PostgreSQL with optimized connection pooling
@@ -24,10 +29,10 @@ if DATABASE_URL:
             "keepalives_idle": 60,  # Seconds before sending keepalive probes
             "keepalives_interval": 10,  # Seconds between keepalive probes
             "keepalives_count": 5   # Number of probes before giving up
-        },
+        } if "postgresql" in DATABASE_URL else {},  # Only apply these for PostgreSQL
         isolation_level="READ COMMITTED"  # Explicit isolation level for better concurrency
     )
-    logger.info(f"Connected to PostgreSQL with optimized connection pool")
+    logger.info(f"Connected to database with optimized connection pool")
 else:
     # Default to SQLite with minimal pooling for local development
     logger.warning("No DATABASE_URL found, defaulting to SQLite")
