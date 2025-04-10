@@ -18,6 +18,12 @@ from sse_starlette.sse import EventSourceResponse
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Simple class for detached messages (avoids ORM dependency)
+class DetachedMessage:
+    def __init__(self, role, content):
+        self.role = role
+        self.content = content
+
 router = APIRouter(tags=["conversations"])
 
 class ConversationCreate(BaseModel):
@@ -115,10 +121,10 @@ async def send_message(
             
             # Create detached copies to avoid database session issues
             for msg in history:
-                detached_history.append({
-                    "role": msg.role,
-                    "content": msg.content
-                })
+                detached_history.append(DetachedMessage(
+                    role=msg.role,
+                    content=msg.content
+                ))
             
             # Add user message
             user_message = service.repository.add_message(
@@ -315,11 +321,11 @@ async def stream_message(
             # Get conversation history and create detached copies to avoid DB dependency
             history = service.get_conversation_messages(conversation_id)
             for msg in history:
-                # Create simplified dict representations instead of ORM objects
-                detached_history.append({
-                    "role": msg.role,
-                    "content": msg.content
-                })
+                # Create DetachedMessage objects instead of dictionaries
+                detached_history.append(DetachedMessage(
+                    role=msg.role,
+                    content=msg.content
+                ))
             
             # Add user message - this now uses a direct repository call
             user_message = service.repository.add_message(
