@@ -331,7 +331,12 @@ async def get_character(
             
             # Increment the view count atomically (no read-modify-write pattern)
             # This avoids race conditions in high traffic scenarios
-            increment_counter(db, "characters", character_id, "views_count")
+            try:
+                # Use num_chats_created field instead of views_count which doesn't exist
+                increment_counter(db, "characters", character_id, "num_chats_created")
+            except Exception as counter_err:
+                # Don't fail the request if increment fails, just log it
+                logger.warning(f"Failed to increment counter: {str(counter_err)}")
             
             # Detach the character from the session to avoid serialization issues
             db.expunge(character)
