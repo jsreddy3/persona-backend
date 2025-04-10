@@ -258,10 +258,31 @@ async def create_character(
             # Note: System messages are generated and stored at conversation creation time
             # not at character creation time
             
+            # Make sure we access all the attributes we need before closing the session
+            # This prevents DetachedInstanceError when the model is serialized
+            character_response = {
+                "id": character_model.id,
+                "name": character_model.name,
+                "character_description": character_model.character_description,
+                "greeting": character_model.greeting,
+                "tagline": character_model.tagline,
+                "photo_url": character_model.photo_url,
+                "num_chats_created": character_model.num_chats_created,
+                "num_messages": character_model.num_messages,
+                "rating": character_model.rating,
+                "attributes": character_model.attributes,
+                "created_at": character_model.created_at.isoformat() if isinstance(character_model.created_at, datetime.datetime) else character_model.created_at,
+                "updated_at": character_model.updated_at.isoformat() if isinstance(character_model.updated_at, datetime.datetime) else character_model.updated_at,
+                "language": character_model.language,
+                "character_types": character_model.character_types
+            }
+            
             # Commit all changes in one transaction
             db_create.commit()
             
-            return character_model
+            # Convert the dictionary to a CharacterResponse instance
+            from pydantic import parse_obj_as
+            return parse_obj_as(CharacterResponse, character_response)
         except Exception as db_error:
             db_create.rollback()
             logger.error(f"Database error creating character: {str(db_error)}")
