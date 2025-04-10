@@ -8,6 +8,7 @@ from services.conversation_service import ConversationService
 from services.llm_service import LLMService
 from dependencies.auth import get_current_user
 from .character_routes import CharacterResponse
+from database.db_utils import batch_update, increment_counter, deduct_user_credits
 import logging
 import time
 from datetime import datetime
@@ -74,77 +75,132 @@ async def send_message(
     Send a message in a conversation and get the AI's response
     Returns both the user's message and the AI's response
     
-    Optimized to avoid holding database connections during API calls
+    Optimized for global distribution with reduced database roundtrips
     """
     try:
         user_id = current_user.id
         message_content = message.content
         
-        # Step 1: Get only the necessary data with a brief DB connection
+        # STEP 1: Comprehensive database session for preparation
         db_read = next(get_db())
+        
+        conversation = None
+        character_creator_id = None
+        system_message = None
+        detached_history = []
+        user_message_id = None
+        
         try:
-            # Create a service just to get required data
-            temp_service = ConversationService(db_read)
+            # Get conversation with all needed data in a single query
+            service = ConversationService(db_read)
+            conversation = service.repository.get_by_id(conversation_id)
             
-            # Check if conversation exists and user has access
-            conversation = temp_service.repository.get_by_id(conversation_id)
             if not conversation:
                 raise ValueError("Conversation not found")
                 
             if conversation.creator_id != user_id and user_id not in [p.id for p in conversation.participants]:
                 raise ValueError("User does not have access to this conversation")
             
+            # Store character creator ID for later counter increment
+            character_creator_id = conversation.character.creator_id
+            
             # Check user credits
-            user = temp_service.user_repository.get_by_id(user_id)
+            user = service.user_repository.get_by_id(user_id)
             if user.credits < 1:
                 raise ValueError("Insufficient credits. Please purchase more credits to continue chatting.")
             
             # Get conversation history and system message
             system_message = conversation.system_message
-            history = temp_service.get_conversation_messages(conversation_id)
-        finally:
-            # Close the first DB connection before external API call
-            db_read.close()
-        
-        # Step 2: Call LLM API without holding any DB connection
-        llm_service = LLMService()
-        ai_response = await llm_service.process_message(system_message, history, message_content)
-        
-        # Step 3: Only open a new DB connection after we have the LLM response
-        db_write = next(get_db())
-        try:
-            # Create a new service with a fresh connection for writes
-            service = ConversationService(db_write)
+            history = service.get_conversation_messages(conversation_id)
             
-            # Add both messages in a transaction
+            # Create detached copies to avoid database session issues
+            for msg in history:
+                detached_history.append({
+                    "role": msg.role,
+                    "content": msg.content
+                })
+            
+            # Add user message
             user_message = service.repository.add_message(
                 conversation_id=conversation_id,
                 role="user",
                 content=message_content
             )
+            user_message_id = user_message.id
             
+            # Commit the user message
+            db_read.commit()
+        except Exception as setup_error:
+            db_read.rollback()
+            logger.error(f"Error in send message setup: {str(setup_error)}")
+            raise setup_error
+        finally:
+            # Close the DB connection before API call
+            db_read.close()
+        
+        # STEP 2: Call LLM API without holding any DB connection
+        llm_service = LLMService()
+        ai_response = await llm_service.process_message(system_message, detached_history, message_content)
+        
+        # STEP 3: Single database session for all updates
+        db_write = next(get_db())
+        try:
+            # Use a single transaction for all updates to minimize roundtrips
+            service = ConversationService(db_write)
+            
+            # Add AI response message
             ai_message = service.repository.add_message(
                 conversation_id=conversation_id,
                 role="assistant",
                 content=ai_response
             )
             
-            # Update last chatted with timestamp
-            service.repository.update_last_chatted_with(conversation_id)
+            # Use batch updates for the rest of the changes
+            updates = [
+                # Update conversation timestamp
+                (
+                    "UPDATE conversations SET last_chatted_with = NOW() WHERE id = :id",
+                    {"id": conversation_id}
+                ),
+                # Deduct user credit (atomic operation)
+                (
+                    "UPDATE users SET credits = credits - 1 WHERE id = :id AND credits >= 1",
+                    {"id": user_id}
+                ),
+                # Increment character creator's message counter (atomic operation)
+                (
+                    "UPDATE users SET character_messages_received = character_messages_received + 1 WHERE id = :id",
+                    {"id": character_creator_id}
+                )
+            ]
             
-            # Deduct credit
-            user = service.user_repository.get_by_id(user_id)
-            user.credits -= 1
+            # Execute the batch updates
+            batch_update(db_write, updates)
             
-            # Commit all changes at once
+            # Get the messages to return
+            user_message_obj = service.repository.get_message_by_id(user_message_id)
+            ai_message_obj = ai_message
+            
             db_write.commit()
             
-            return [user_message, ai_message]
-        except Exception as e:
+            # Return both messages
+            return [
+                MessageResponse(
+                    id=user_message_obj.id,
+                    role=user_message_obj.role,
+                    content=user_message_obj.content
+                ),
+                MessageResponse(
+                    id=ai_message_obj.id,
+                    role=ai_message_obj.role,
+                    content=ai_message_obj.content
+                )
+            ]
+        except Exception as db_error:
             db_write.rollback()
-            raise ValueError(f"Failed to save messages: {str(e)}")
+            logger.error(f"Error in message response handling: {str(db_error)}")
+            raise HTTPException(status_code=500, detail=str(db_error))
         finally:
-            # Make sure to close the write connection
             db_write.close()
             
     except ValueError as e:
@@ -207,7 +263,7 @@ async def create_conversation(
         logger.error(f"Error creating conversation: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/{conversation_id}/stream", response_class=EventSourceResponse)
+@router.post("/{conversation_id}/messages/stream")
 async def stream_message(
     conversation_id: int,
     content: str,
@@ -218,74 +274,80 @@ async def stream_message(
     Stream a message in a conversation and get the AI's response token by token
     Returns a stream of SSE events containing tokens
     
-    Optimized to avoid holding database connections during API calls
+    Optimized for global distribution with reduced database roundtrips
     """
     try:
         user_id = current_user.id
         message_content = content
         
-        # Step 1: Get only the necessary data with a brief DB connection
+        # STEP 1: Single comprehensive database session for preparation
+        # This consolidates multiple database operations into one session
         db_read = next(get_db())
+        
+        conversation = None
+        character_creator_id = None
+        system_message = None
+        detached_history = []
+        user_message_id = None
+        ai_message_id = None
+        
         try:
-            # Create a service just to get required data
-            temp_service = ConversationService(db_read)
+            # Get conversation with all needed data in a single query
+            service = ConversationService(db_read)
+            conversation = service.repository.get_by_id(conversation_id)
             
-            # Check if conversation exists and user has access
-            conversation = temp_service.repository.get_by_id(conversation_id)
             if not conversation:
                 raise ValueError("Conversation not found")
                 
+            # Check if user has access to this conversation
             if conversation.creator_id != user_id and user_id not in [p.id for p in conversation.participants]:
                 raise ValueError("User does not have access to this conversation")
             
-            # Get the character and its creator ID for later use
-            character = conversation.character
-            character_creator_id = character.creator_id
-            
-            # Check user credits
-            user = temp_service.user_repository.get_by_id(user_id)
+            # Get user for credit check (access pattern optimized)
+            user = service.user_repository.get_by_id(user_id)
             if user.credits < 1:
                 raise ValueError("Insufficient credits. Please purchase more credits to continue chatting.")
             
-            # Get conversation history and system message
+            # Store essential data needed during streaming
+            character_creator_id = conversation.character.creator_id
             system_message = conversation.system_message
-            history = temp_service.get_conversation_messages(conversation_id)
             
-            # Create detached Message objects to avoid database session issues
-            detached_history = []
+            # Get conversation history and create detached copies to avoid DB dependency
+            history = service.get_conversation_messages(conversation_id)
             for msg in history:
-                # Create a new Message object with just the needed attributes
-                detached_msg = Message(
-                    id=msg.id,
-                    role=msg.role,
-                    content=msg.content
-                )
-                detached_history.append(detached_msg)
+                # Create simplified dict representations instead of ORM objects
+                detached_history.append({
+                    "role": msg.role,
+                    "content": msg.content
+                })
             
-            # Add user message upfront, before streaming
-            user_message = temp_service.repository.add_message(
+            # Add user message - this now uses a direct repository call
+            user_message = service.repository.add_message(
                 conversation_id=conversation_id,
                 role="user",
                 content=message_content
             )
+            user_message_id = user_message.id
             
-            # Initialize empty AI message to be updated later
-            ai_message = temp_service.repository.add_message(
+            # Initialize empty AI message
+            ai_message = service.repository.add_message(
                 conversation_id=conversation_id,
                 role="assistant",
                 content=""
             )
-            
-            # Store necessary IDs for later
             ai_message_id = ai_message.id
             
-            # Commit these changes
+            # Perform all database writes in a single commit
             db_read.commit()
+        except Exception as setup_error:
+            db_read.rollback()
+            logger.error(f"Error in stream message setup: {str(setup_error)}")
+            raise setup_error
         finally:
             # Close the DB connection before starting streaming
             db_read.close()
         
-        # Step 2: Set up LLM service for streaming (no DB connection held)
+        # STEP 2: Set up LLM service for streaming (no DB connection held)
         llm_service = LLMService()
         
         async def event_generator():
@@ -299,23 +361,37 @@ async def stream_message(
                         "data": token
                     }
                 
-                # After streaming is complete, update the message in the database
+                # STEP 3: Final database updates in a SINGLE transaction
+                # This consolidates multiple updates into one database session with minimal operations
                 db_update = next(get_db())
                 try:
-                    update_service = ConversationService(db_update)
-                    # Update message with complete content
-                    update_service.repository.update_message(ai_message_id, accumulated_content)
-                    # Update last_chatted_with timestamp
-                    update_service.repository.update_last_chatted_with(conversation_id)
-                    # Deduct credit
-                    user = update_service.user_repository.get_by_id(user_id)
-                    user.credits -= 1
+                    # Use batch update to perform all database changes in one transaction
+                    # This significantly reduces roundtrips for global deployments
+                    updates = [
+                        # Update message content
+                        (
+                            "UPDATE messages SET content = :content WHERE id = :id",
+                            {"content": accumulated_content, "id": ai_message_id}
+                        ),
+                        # Update conversation timestamp
+                        (
+                            "UPDATE conversations SET last_chatted_with = NOW() WHERE id = :id",
+                            {"id": conversation_id}
+                        ),
+                        # Deduct user credit (atomic operation)
+                        (
+                            "UPDATE users SET credits = credits - 1 WHERE id = :id AND credits >= 1",
+                            {"id": user_id}
+                        ),
+                        # Increment character creator's message counter (atomic operation)
+                        (
+                            "UPDATE users SET character_messages_received = character_messages_received + 1 WHERE id = :id",
+                            {"id": character_creator_id}
+                        )
+                    ]
                     
-                    # Increment the character creator's message received counter
-                    character_creator = update_service.user_repository.get_by_id(character_creator_id)
-                    character_creator.character_messages_received += 1
-                    
-                    db_update.commit()
+                    # Execute all updates in one transaction
+                    batch_update(db_update, updates)
                 except Exception as db_error:
                     db_update.rollback()
                     logger.error(f"Error updating message after streaming: {str(db_error)}")
@@ -324,7 +400,7 @@ async def stream_message(
                 
                 # Send done event when streaming completes successfully
                 yield {
-                    "event": "done",
+                    "event": "done", 
                     "data": ""
                 }
             except Exception as stream_error:

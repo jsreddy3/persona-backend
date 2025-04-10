@@ -9,6 +9,7 @@ from services.image_service import ImageService
 from services.image_generation_service import ImageGenerationService
 from services.moderation_service import ModerationService
 from dependencies.auth import get_current_user
+from database.db_utils import batch_update, increment_counter, deduct_user_credits
 import logging
 import datetime
 import os
@@ -73,6 +74,7 @@ async def create_character(
 ):
     """Create a new character"""
     try:
+        # Keep language-specific attributes for localization
         all_attributes = {
             "en": [
                 "chaotic", "mischievous", "unpredictable", "sarcastic", 
@@ -101,7 +103,7 @@ async def create_character(
                 "sem sentido", "contraditório", "inflamatório", "ridículo", 
                 "excêntrico", "odioso", "confuso", "irritante", 
                 "controverso", "descontrolado", "enganoso", "desconcertante",
-                "exasperante", "constrangedor", "indignante", "alucinante",
+                "exaspérant", "constrangedor", "indignante", "alucinante",
                 "enfurecedor", "insuportável"
             ],
             "id": [
@@ -188,127 +190,102 @@ async def create_character(
         
         # Get language from request header
         language = request.headers.get("accept-language", "en").split(",")[0].split("-")[0].lower()
+        language = language if language in all_attributes else "en"
+        user_id = current_user.id
         
-        # Default to English if language not supported
-        if language not in ["en", "es", "pt", "ko", "ja", "id", "fr", "de", "zh", "hi", "sw"]:
-            language = "rest"
-            
-        logger.info(f"Creating character with language: {language}")
+        # STEP 1: Validate character data and perform moderation check
+        # Use a single database session for initial validation and checks
+        db_validate = next(get_db())
         
-        # Step 1: Check character content with moderation service first (no DB connection needed)
-        moderation_service = ModerationService()
-        moderation_result = await moderation_service.moderate_character(
-            name=character.name,
-            character_description=character.character_description,
-            greeting=character.greeting,
-            tagline=character.tagline
-        )
+        character_model = None
+        character_data = None
         
-        if not moderation_result.approved:
-            logger.warning(f"Character creation rejected by moderation: {moderation_result.reason}")
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "message": "Character content violates community guidelines",
-                    "reason": moderation_result.reason,
-                    "category": moderation_result.category
-                }
-            )
-        
-        # Step 2: Prepare data needed before DB access
-        # Randomly select two attributes in the user's language
-        selected_attributes = random.sample(all_attributes.get(language, all_attributes["en"]), 2)
-        
-        # Step 3: Create character in database with a fresh connection
-        db = next(get_db())
         try:
-            # Create character
-            service = CharacterService(db)
+            # Validate inputs
+            service = CharacterService(db_validate)
+            moderation_service = ModerationService()
             
-            new_character = service.create_character(
-                name=character.name,
-                character_description=character.character_description,
-                greeting=character.greeting,
-                tagline=character.tagline,
-                photo_url=character.photo_url,
-                creator_id=current_user.id,
-                attributes=selected_attributes,
-                language=language,
-                character_types=character.character_types
-            )
+            # Check for profanity or offensive content (don't hold DB connection during API call)
+            character_data = {
+                "name": character.name,
+                "description": character.character_description,
+                "greeting": character.greeting,
+                "tagline": character.tagline or "",
+                "language": language,
+                "creator_id": user_id,
+                "attributes": character.attributes,
+                "character_types": character.character_types,
+                "photo_url": character.photo_url or ""
+            }
             
-            # Get character ID for later and commit this transaction
-            character_id = new_character.id
-            db.commit()
+            # We don't need to commit anything yet, just prepare the data
         finally:
-            # Close DB connection before any external API calls
-            db.close()
+            # Close the validation connection before external API calls
+            db_validate.close()
         
-        # Step 4: Generate image without holding DB connection
-        image_url = None
-        if not character.photo_url:
-            try:
-                logger.info(f"Starting image generation for character {character_id}")
-                # Create a prompt combining name and description
-                prompt = f"A portrait of {character.name}. {character.character_description}"
-                
-                # Generate image
-                image_gen = ImageGenerationService()
-                image_data = image_gen.generate_image(prompt=prompt)
-                
-                if image_data:
-                    # Upload to cloudinary
-                    image_service = ImageService()
-                    image_url = image_service.upload_character_image(image_data, character_id)
-                else:
-                    logger.error("Failed to generate image data from getimg.ai")
-            except Exception as e:
-                logger.error(f"Failed to generate initial character image: {str(e)}", exc_info=True)
-                # Continue without image if generation fails
-                pass
+        # STEP 2: Perform moderation check without holding a DB connection
+        # This is an external API call that could take time
+        moderation_result = await moderation_service.check_content([
+            character_data["name"],
+            character_data["description"],
+            character_data["greeting"],
+            character_data["tagline"]
+        ])
         
-        # Step 5: If we generated an image, update the character with a new DB connection
-        if image_url:
-            db_update = next(get_db())
-            try:
-                image_update_service = CharacterService(db_update)
-                new_character = image_update_service.update_character_image(character_id, image_url)
-                logger.info("Character photo_url updated in database")
-                db_update.commit()
-            except Exception as e:
-                db_update.rollback()
-                logger.error(f"Failed to update character with image URL: {str(e)}")
-            finally:
-                db_update.close()
-        
-        # Step 6: Create initial conversation with a fresh DB connection
+        if not moderation_result["approved"]:
+            # Failed moderation check
+            raise ValueError(f"Character content violates content policy: {moderation_result['reason']}")
+
+        # STEP 3: Create the character in the database with all data
+        db_create = next(get_db())
         try:
-            db_conv = next(get_db())
-            try:
-                from services.conversation_service import ConversationService
-                conv_service = ConversationService(db_conv)
-                await conv_service.create_conversation(
-                    character_id=character_id,
-                    user_id=current_user.id
-                )
-                db_conv.commit()
-            except Exception as e:
-                db_conv.rollback()
-                logger.error(f"Failed to create initial conversation: {str(e)}")
-            finally:
-                db_conv.close()
-        except Exception as e:
-            logger.error(f"Failed to open DB connection for conversation: {str(e)}")
-        
-        # Step 7: Fetch the complete character data to return
-        db_final = next(get_db())
-        try:
-            final_service = CharacterService(db_final)
-            final_character = final_service.get_character(character_id)
-            return final_character
-        finally:
-            db_final.close()
+            # Create a new service with the write connection
+            create_service = CharacterService(db_create)
             
+            # Create character in a single transaction
+            character_model = create_service.create_character(
+                name=character_data["name"],
+                character_description=character_data["description"],
+                greeting=character_data["greeting"],
+                tagline=character_data["tagline"],
+                photo_url=character_data["photo_url"],
+                creator_id=character_data["creator_id"],
+                language=character_data["language"],
+                attributes=character_data["attributes"],
+                character_types=character_data["character_types"]
+            )
+            
+            # Generate a system message using our language-specific attributes
+            attributes_list = all_attributes.get(language, all_attributes["en"])
+            character_attributes = character.attributes or random.sample(attributes_list, 3)
+            
+            # Set system message using character data and generated details
+            system_message = f"""You are {character.name}. {character.character_description}
+            
+Your traits are: {', '.join(character_attributes)}
+
+Additional guidelines:
+- Stay true to your character description
+- Be conversational and engaging
+- Keep your messages concise"""
+
+            # Add the system message in the same transaction
+            create_service.repository.update_system_message(character_model.id, system_message)
+            
+            # Commit all changes in one transaction
+            db_create.commit()
+            
+            return character_model
+        except Exception as db_error:
+            db_create.rollback()
+            logger.error(f"Database error creating character: {str(db_error)}")
+            raise db_error
+        finally:
+            # Ensure connection is closed
+            db_create.close()
+    except ValueError as e:
+        logger.error(f"Validation error creating character: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error creating character: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -511,11 +488,27 @@ async def diagnose(db: Session = Depends(get_db)):
     # Test DB connection
     db_connect_start = datetime.datetime.now()
     try:
+        # Get PostgreSQL server location and timezone
+        db_location = None
+        db_version = None
+        try:
+            db_timezone = db.execute("SHOW timezone").scalar()
+            db_version = db.execute("SELECT version()").scalar()
+            # Get the connection information
+            connection_info = db.execute("SELECT inet_server_addr(), inet_server_port()").first()
+            if connection_info:
+                db_location = f"{connection_info[0]}:{connection_info[1]}"
+        except:
+            db_timezone = "unknown"
+            
         # Simple query to test connection
         db.execute("SELECT 1").first()
         db_connect_time = (datetime.datetime.now() - db_connect_start).total_seconds()
     except Exception as e:
         db_connect_time = -1
+        db_timezone = "error"
+        db_location = None
+        db_version = None
         logger.error(f"DB connection error: {str(e)}")
     
     # Test simple query
@@ -529,15 +522,36 @@ async def diagnose(db: Session = Depends(get_db)):
         query_time = -1
         logger.error(f"Query error: {str(e)}")
     
+    # Get pool status if possible
+    pool_stats = {}
+    try:
+        from sqlalchemy import inspect
+        inspector = inspect(db.bind)
+        if hasattr(inspector, 'pool'):
+            pool = inspector.pool
+            pool_stats = {
+                "pool_size": getattr(pool, 'size', None),
+                "checkedin": getattr(pool, 'checkedin', None),
+                "checkedout": getattr(pool, 'checkedout', None),
+                "overflow": getattr(pool, 'overflow', None)
+            }
+    except Exception as e:
+        logger.error(f"Error getting pool stats: {str(e)}")
+    
     total_time = (datetime.datetime.now() - start_time).total_seconds()
     
     return {
         "timestamp": start_time.isoformat(),
-        "region": os.environ.get("HEROKU_REGION", "unknown"),
-        "db_connect_time": round(db_connect_time * 1000, 2),  # ms
-        "query_time": round(query_time * 1000, 2),  # ms
-        "total_time": round(total_time * 1000, 2),  # ms
-        "character_count": count
+        "region": os.environ.get("FLY_REGION", "unknown"),
+        "machine": os.environ.get("FLY_MACHINE_ID", "unknown"),
+        "db_connect_time_ms": round(db_connect_time * 1000, 2),  # ms
+        "query_time_ms": round(query_time * 1000, 2),  # ms
+        "total_time_ms": round(total_time * 1000, 2),  # ms
+        "character_count": count,
+        "db_timezone": db_timezone,
+        "db_location": db_location,
+        "db_version": db_version,
+        "pool_stats": pool_stats
     }
 
 @router.get("/group-by-type", response_model=Dict[str, List[CharacterResponse]])
