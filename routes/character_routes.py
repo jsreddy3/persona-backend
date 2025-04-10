@@ -225,16 +225,16 @@ async def create_character(
         
         # STEP 2: Perform moderation check without holding a DB connection
         # This is an external API call that could take time
-        moderation_result = await moderation_service.moderate_character(
-            name=character_data["name"],
-            character_description=character_data["description"],
-            greeting=character_data["greeting"],
-            tagline=character_data["tagline"]
-        )
+        moderation_result = await moderation_service.check_content([
+            character_data["name"],
+            character_data["description"],
+            character_data["greeting"],
+            character_data["tagline"]
+        ])
         
-        if not moderation_result.approved:
+        if not moderation_result["approved"]:
             # Failed moderation check
-            raise ValueError(f"Character content violates content policy: {moderation_result.reason}")
+            raise ValueError(f"Character content violates content policy: {moderation_result['reason']}")
 
         # STEP 3: Create the character in the database with all data
         db_create = next(get_db())
@@ -268,6 +268,9 @@ Additional guidelines:
 - Stay true to your character description
 - Be conversational and engaging
 - Keep your messages concise"""
+
+            # Add the system message in the same transaction
+            create_service.repository.update_system_message(character_model.id, system_message)
             
             # Commit all changes in one transaction
             db_create.commit()
@@ -328,12 +331,7 @@ async def get_character(
             
             # Increment the view count atomically (no read-modify-write pattern)
             # This avoids race conditions in high traffic scenarios
-            try:
-                # Use num_chats_created field instead of views_count which doesn't exist
-                increment_counter(db, "characters", character_id, "num_chats_created")
-            except Exception as counter_err:
-                # Don't fail the request if increment fails, just log it
-                logger.warning(f"Failed to increment counter: {str(counter_err)}")
+            increment_counter(db, "characters", character_id, "views_count")
             
             # Detach the character from the session to avoid serialization issues
             db.expunge(character)
