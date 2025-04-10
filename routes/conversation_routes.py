@@ -263,7 +263,7 @@ async def create_conversation(
         logger.error(f"Error creating conversation: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/{conversation_id}/messages/stream")
+@router.get("/{conversation_id}/stream")
 async def stream_message(
     conversation_id: int,
     content: str,
