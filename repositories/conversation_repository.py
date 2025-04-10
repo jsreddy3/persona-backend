@@ -1,8 +1,10 @@
-from sqlalchemy.orm import Session, joinedload, subqueryload
-from typing import List, Optional
-from .base import BaseRepository
-from database.models import Conversation, Message, Character
+from sqlalchemy.orm import Session, joinedload, subqueryload, load_only
+from sqlalchemy import desc, func, case, and_, or_
 from datetime import datetime
+from typing import List, Dict, Any, Optional
+
+from database.models import Conversation, Message, Character, User
+from .base import BaseRepository
 
 class ConversationRepository(BaseRepository[Conversation]):
     def __init__(self, db: Session):
@@ -62,13 +64,14 @@ class ConversationRepository(BaseRepository[Conversation]):
         # and prefetches the last message for each conversation
         return self.db.query(Conversation)\
             .options(
-                # Only load necessary character fields
+                # Use class-bound attributes instead of strings
                 joinedload(Conversation.character).load_only(
-                    "id", "name", "photo_url", "tagline", "character_description"
+                    Character.id, Character.name, Character.photo_url, 
+                    Character.tagline, Character.character_description
                 ),
                 # Fetch latest message for preview
                 subqueryload(Conversation.messages).options(
-                    load_only("content", "role")
+                    load_only(Message.content, Message.role)
                 ).order_by(Message.created_at.desc()).limit(1)
             )\
             .filter(
