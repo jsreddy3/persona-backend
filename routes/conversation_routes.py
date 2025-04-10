@@ -213,47 +213,17 @@ async def send_message(
 @router.get("/{conversation_id}/messages", response_model=List[MessageResponse])
 async def get_conversation_messages(
     conversation_id: int,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Get all messages for a conversation
-    
-    Optimized for global distribution with reduced database roundtrips
-    """
     try:
-        user_id = current_user.id
-        
-        # Use a short-lived database connection
-        db = next(get_db())
-        try:
-            # Verify access and get messages in one efficient query
-            service = ConversationService(db)
-            
-            # First verify the user has access to this conversation
-            conversation = service.repository.get_by_id(conversation_id)
-            if not conversation:
-                raise HTTPException(status_code=404, detail="Conversation not found")
-                
-            if conversation.creator_id != user_id and user_id not in [p.id for p in conversation.participants]:
-                raise HTTPException(status_code=403, detail="User does not have access to this conversation")
-            
-            # Get messages using an optimized query
-            messages = service.get_conversation_messages(conversation_id)
-            
-            # Detach messages from the session to avoid serialization issues
-            for message in messages:
-                db.expunge(message)
-                
-            return messages
-        finally:
-            # Ensure connection is closed
-            db.close()
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
+        service = ConversationService(db)
+        messages = service.get_conversation_messages(conversation_id)
+        if not messages:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        return messages
     except Exception as e:
-        logger.error(f"Error getting conversation messages: {str(e)}")
-        logger.exception("Full traceback:")
+        logger.error(f"Error getting messages: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/", response_model=List[ConversationResponse])
@@ -300,68 +270,22 @@ async def get_conversations(
 @router.post("/", response_model=int)
 async def create_conversation(
     conversation: ConversationCreate,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Create a new conversation
-    
-    Optimized for global distribution with reduced database roundtrips
-    """
     try:
-        user_id = current_user.id
-        character_id = conversation.character_id
-        language = conversation.language
-        
-        # Use a short-lived database connection
-        db = next(get_db())
-        try:
-            service = ConversationService(db)
-            
-            # Verify character exists
-            character_service = CharacterService(db)
-            character = character_service.get_character_by_id(character_id)
-            if not character:
-                raise ValueError(f"Character with ID {character_id} not found")
-            
-            # Create the conversation with all data in a single transaction
-            conv = await service.create_conversation(
-                character_id=character_id,
-                user_id=user_id,
-                language=language
-            )
-            
-            # Get the ID before closing the connection
-            conversation_id = conv.id
-            
-            # Use batch_update for consistent approach with other optimized routes
-            from database.db_utils import batch_update
-            
-            # Updates to perform in a single transaction
-            updates = [
-                # Update user conversation count if needed
-                (
-                    "UPDATE users SET conversations_count = conversations_count + 1 WHERE id = :user_id",
-                    {"user_id": user_id}
-                ),
-                # Any other batch updates needed for conversation creation
-            ]
-            
-            # Execute all updates in one transaction
-            batch_update(db, updates)
-            
-            return conversation_id
-        except Exception as e:
-            db.rollback()
-            raise e
-        finally:
-            # Ensure connection is closed
-            db.close()
+        service = ConversationService(db)
+        conv = await service.create_conversation(
+            character_id=conversation.character_id,
+            user_id=current_user.id,
+            language=conversation.language
+        )
+        return conv.id
     except ValueError as e:
         logger.error(f"Error creating conversation: {str(e)}")
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Error creating conversation: {str(e)}")
-        logger.exception("Full traceback:")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/{conversation_id}/messages/stream")

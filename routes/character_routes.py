@@ -9,7 +9,7 @@ from services.image_service import ImageService
 from services.image_generation_service import ImageGenerationService
 from services.moderation_service import ModerationService
 from dependencies.auth import get_current_user
-from database.db_utils import batch_update, increment_counter, deduct_user_credits, update_with_lock
+from database.db_utils import batch_update, increment_counter, deduct_user_credits
 import logging
 import datetime
 import os
@@ -312,43 +312,18 @@ async def get_popular_characters(
 @router.get("/detail/{character_id}", response_model=CharacterResponse)
 async def get_character(
     character_id: int,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Get character details by ID
-    
-    Optimized for global distribution with reduced database roundtrips
-    """
+    """Get character details by ID"""
     try:
-        # Use a short-lived database connection
-        db = next(get_db())
-        try:
-            service = CharacterService(db)
-            character = service.get_character(character_id)
-            
-            if not character:
-                raise HTTPException(status_code=404, detail="Character not found")
-            
-            # Increment the view count atomically (no read-modify-write pattern)
-            # This avoids race conditions in high traffic scenarios
-            increment_counter(db, "characters", character_id, "views_count")
-            
-            # Detach the character from the session to avoid serialization issues
-            db.expunge(character)
-            
-            # Commit the increment
-            db.commit()
-            
-            return character
-        finally:
-            # Ensure connection is closed
-            db.close()
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
+        service = CharacterService(db)
+        character = service.get_character(character_id)  
+        if not character:
+            raise HTTPException(status_code=404, detail="Character not found")
+        return character
     except Exception as e:
         logger.error(f"Error getting character {character_id}: {str(e)}")
-        logger.exception("Full traceback:")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{character_id}/stats")
@@ -369,96 +344,46 @@ async def get_character_stats(
 async def upload_character_image(
     character_id: int,
     file: UploadFile = File(...),
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Upload a character's image
-    
-    Optimized for global distribution with reduced database roundtrips
-    """
+    """Upload a character's image"""
     try:
-        # Read file content first (outside of DB connection)
+        # Print debug info
         print(f"Received file: {file.filename}")
+        
+        # Read file
         contents = await file.read()
         print(f"Read {len(contents)} bytes")
         
-        # First, verify character exists and user has permission
-        db_verify = next(get_db())
-        try:
-            service = CharacterService(db_verify)
-            character = service.get_character_by_id(character_id)
-            
-            if not character:
-                raise HTTPException(status_code=404, detail="Character not found")
-                
-            if character.creator_id != current_user.id:
-                raise HTTPException(status_code=403, detail="Not authorized to update this character")
-        finally:
-            db_verify.close()
-        
-        # Upload image to external service (no DB connection held during this time)
+        # Upload image
         image_service = ImageService()
         url = image_service.upload_character_image(contents, character_id)
         if not url:
             raise HTTPException(status_code=400, detail="Failed to upload image")
             
-        # Finally update character with new image URL in a separate connection
-        from database.db_utils import update_with_lock
-        from database.models import Character
+        # Update character
+        service = CharacterService(db)
+        character = service.update_character_image(character_id, url)
+        if not character:
+            raise HTTPException(status_code=400, detail="Failed to update character")
+            
+        return {"photo_url": url}
         
-        db_update = next(get_db())
-        try:
-            # Use the update_with_lock utility to safely update with row-level locking
-            def update_image(character):
-                character.photo_url = url
-                
-            updated_character = update_with_lock(db_update, Character, character_id, update_image)
-            if not updated_character:
-                raise HTTPException(status_code=400, detail="Failed to update character")
-                
-            db_update.commit()
-            return {"photo_url": url}
-        except Exception as update_error:
-            db_update.rollback()
-            raise update_error
-        finally:
-            db_update.close()
-        
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
     except Exception as e:
         logger.error(f"Error uploading character image: {str(e)}")
-        logger.exception("Full traceback:")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/{character_id}/generate-image")
 async def generate_character_image(
     character_id: int,
     request: GenerateImageRequest,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Generate an AI image for a character
-    
-    Optimized for global distribution with reduced database roundtrips
-    """
+    """Generate an AI image for a character"""
     try:
-        # First, verify character exists and user has permission
-        db_verify = next(get_db())
-        try:
-            service = CharacterService(db_verify)
-            character = service.get_character_by_id(character_id)
-            
-            if not character:
-                raise HTTPException(status_code=404, detail="Character not found")
-                
-            if character.creator_id != current_user.id:
-                raise HTTPException(status_code=403, detail="Not authorized to update this character")
-        finally:
-            db_verify.close()
-        
-        # Generate image (no DB connection held during this external API call)
+        # Generate image
         image_gen = ImageGenerationService()
         image_data = image_gen.generate_image(
             prompt=request.prompt,
@@ -470,39 +395,22 @@ async def generate_character_image(
         if not image_data:
             raise HTTPException(status_code=400, detail="Failed to generate image")
             
-        # Upload to cloudinary (no DB connection held during this external API call)
+        # Upload to cloudinary
         image_service = ImageService()
         url = image_service.upload_character_image(image_data, character_id)
         if not url:
             raise HTTPException(status_code=400, detail="Failed to upload generated image")
             
-        # Finally update character with new image URL in a separate connection
-        from database.models import Character
+        # Update character
+        service = CharacterService(db)
+        character = service.update_character_image(character_id, url)
+        if not character:
+            raise HTTPException(status_code=400, detail="Failed to update character")
+            
+        return {"photo_url": url}
         
-        db_update = next(get_db())
-        try:
-            # Use the update_with_lock utility to safely update with row-level locking
-            def update_image(character):
-                character.photo_url = url
-                
-            updated_character = update_with_lock(db_update, Character, character_id, update_image)
-            if not updated_character:
-                raise HTTPException(status_code=400, detail="Failed to update character")
-                
-            db_update.commit()
-            return {"photo_url": url}
-        except Exception as update_error:
-            db_update.rollback()
-            raise update_error
-        finally:
-            db_update.close()
-        
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
     except Exception as e:
         logger.error(f"Error generating character image: {str(e)}")
-        logger.exception("Full traceback:")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/creator/{world_id}")
